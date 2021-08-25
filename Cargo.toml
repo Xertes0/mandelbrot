@@ -1,0 +1,11 @@
+[package]
+name = "mandelbrot_set"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+sdl2       = "0.34.5"
+num-traits = "0.2.14"
+palette    = "0.6.0"
