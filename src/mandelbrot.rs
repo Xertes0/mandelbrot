@@ -46,7 +46,6 @@ impl Mandelbrot {
         let pos      = self.pos;
         let max_iter = self.max_iter;
 
-        let instant = std::time::Instant::now();
         self.pixels.par_iter_mut().enumerate().for_each(|(i, pixel)| {
             let x: u32 = i as u32 % width;
             let y: u32 = i as u32 / height;
@@ -74,7 +73,6 @@ impl Mandelbrot {
 
             *pixel = Rgb::from_color(Hsv::new(hue, 1.0, value)).into_format().into_raw();
         });
-        println!("Elapsed: {}", instant.elapsed().as_millis());
     }
 }
 

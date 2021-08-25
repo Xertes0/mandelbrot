@@ -90,6 +90,7 @@ fn main() -> Result<(), String> {
             canvas.set_draw_color(Color::RGB(0, 0, 0));
 
             println!("drawing");
+            let instant = std::time::Instant::now();
             canvas.clear();
 
             mandelbrot.update();
@@ -98,7 +99,9 @@ fn main() -> Result<(), String> {
             canvas.copy(&texture, None, None).unwrap();
 
             canvas.present();
+            let elapsed = instant.elapsed();
             println!("frame");
+            println!("Elapsed: {}", elapsed.as_millis());
 
             draw = false;
         }
