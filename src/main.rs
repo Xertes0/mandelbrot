@@ -3,11 +3,18 @@ extern crate num_traits;
 extern crate palette;
 
 use sdl2::{
+    render::{
+        Canvas,
+        TextureCreator,
+        Texture,
+    },
+    pixels::{
+        Color,
+        PixelFormatEnum,
+    },
     event::Event,
     keyboard::Keycode,
-    pixels::Color,
     rect::Point,
-    render::Canvas,
     video::Window,
 };
 
@@ -26,12 +33,13 @@ fn map<T: Num + Copy>(val: T, a_min: T, a_max: T, b_min: T, b_max: T) -> T {
     (val-a_min)/(a_max-a_min) * (b_max-b_min) + b_min
 }
 
-const WIDTH:  u32 = 1000;
-const HEIGHT: u32 = 1000;
+const WIDTH:  u32 = 500;
+const HEIGHT: u32 = 500;
 const ZOOM_FACTOR:      f32 = 0.4;
 const MOV_SPEED_FACTOR: f32 = 0.925;
 
-fn draw_set(canvas: &mut Canvas<Window>, range: &(f32,f32), pos: &(f32,f32), max_iter: u32) -> Result<(), String> {
+fn draw_set(canvas: &mut Canvas<Window>, texture: &mut Texture, range: &(f32,f32), pos: &(f32,f32), max_iter: u32) -> Result<(), String> {
+    let mut pixels: Vec<u8> = vec![0; (WIDTH*HEIGHT*3) as usize]; // 3 colors - RGB
     let mut hsv = Hsv::new(0., 1., 0.);
     for x in 0..WIDTH {
         for y in 0..HEIGHT {
@@ -58,11 +66,17 @@ fn draw_set(canvas: &mut Canvas<Window>, range: &(f32,f32), pos: &(f32,f32), max
             hsv.value = if iter == max_iter {0.} else {1.};
 
             let rgb: [u8; 3] = Rgb::from_color(hsv).into_format().into_raw();
-            //println!("{} {} {}", rgb[0], rgb[1], rgb[2]);
-            canvas.set_draw_color(Color::RGB(rgb[0], rgb[1], rgb[2]));
-            canvas.draw_point(Point::new(x as i32,y as i32))?;
+            let offset: usize = ((y*WIDTH*3) + (x*3)) as usize;
+            pixels[offset]   = rgb[0];
+            pixels[offset+1] = rgb[1];
+            pixels[offset+2] = rgb[2];
+            //canvas.set_draw_color(Color::RGB(rgb[0], rgb[1], rgb[2]));
+            //canvas.draw_point(Point::new(x as i32,y as i32))?;
         }
     }
+
+    texture.update(None, pixels.as_slice(), (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
+    canvas.copy(&texture, None, None).unwrap();
 
     Ok(())
 }
@@ -93,6 +107,9 @@ fn main() -> Result<(), String> {
 
     let mut zoom:      f32 = 1.;
     let mut mov_speed: f32 = 0.4;
+
+    let texture_creator = canvas.texture_creator();
+    let mut texture = texture_creator.create_texture_static(PixelFormatEnum::RGB24, WIDTH, HEIGHT).unwrap();
 
     'main: loop {
         for event in event_pump.poll_iter() {
@@ -131,7 +148,7 @@ fn main() -> Result<(), String> {
 
             println!("drawing");
 
-            draw_set(&mut canvas, &range, &pos, max_iter)?;
+            draw_set(&mut canvas, &mut texture, &range, &pos, max_iter)?;
 
             println!("frame");
             canvas.present();
