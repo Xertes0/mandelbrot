@@ -12,10 +12,10 @@ use sdl2::{
     keyboard::Keycode,
 };
 
-const WIDTH:  u32 = 500;
-const HEIGHT: u32 = 500;
-const ZOOM_FACTOR:      f32 = 0.4;
-const MOV_SPEED_FACTOR: f32 = 0.925;
+const WIDTH:  u32 = 1000;
+const HEIGHT: u32 = 1000;
+const ZOOM_FACTOR:      f64 = 0.4;
+const MOV_SPEED_FACTOR: f64 = 0.925;
 
 
 fn main() -> Result<(), String> {
@@ -44,8 +44,8 @@ fn main() -> Result<(), String> {
     mandelbrot.range = (-2.5,1.5);
     mandelbrot.pos   = (0.,0.);
 
-    let mut zoom:      f32 = 1.;
-    let mut mov_speed: f32 = 0.4;
+    let mut zoom:      f64 = 1.;
+    let mut mov_speed: f64 = 0.4;
 
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator.create_texture_static(PixelFormatEnum::RGB24, WIDTH, HEIGHT).unwrap();
@@ -84,8 +84,9 @@ fn main() -> Result<(), String> {
             println!("Range:       {} {}", mandelbrot.range.0, mandelbrot.range.1);
             println!("Pos:         {} {}", mandelbrot.pos.0, mandelbrot.pos.1);
             println!("Zoom/factor: {} {}", zoom, ZOOM_FACTOR);
+            println!("Next zoom:   {}"   , ZOOM_FACTOR/zoom);
             println!("Mov/factor : {} {}", mov_speed, MOV_SPEED_FACTOR);
-            println!("Max iter   : {}",    mandelbrot.max_iter);
+            println!("Max iter   : {}"   , mandelbrot.max_iter);
             canvas.set_draw_color(Color::RGB(0, 0, 0));
 
             println!("drawing");
@@ -93,7 +94,7 @@ fn main() -> Result<(), String> {
 
             mandelbrot.update();
 
-            texture.update(None, &mandelbrot.pixels, (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
+            texture.update(None, &mandelbrot.get_pixels(), (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
             canvas.copy(&texture, None, None).unwrap();
 
             canvas.present();
