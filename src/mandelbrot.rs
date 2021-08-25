@@ -1,7 +1,10 @@
 extern crate num_traits;
 extern crate palette;
+extern crate rayon;
 
 use num_traits::Num;
+
+use rayon::prelude::*;
 
 use palette::{
     Hsv,
@@ -12,10 +15,10 @@ use palette::{
 };
 
 pub struct Mandelbrot {
-    pub pixels:   Vec::<u8>,
-    pub range:    (f32,f32),
-    pub pos:      (f32,f32),
+    pub range:    (f64,f64),
+    pub pos:      (f64,f64),
     pub max_iter: u32,
+    pixels:   Vec::<[u8;3]>,
     width:  u32,
     height: u32,
 }
@@ -24,46 +27,54 @@ impl Mandelbrot {
     pub fn new(width: u32, height: u32) -> Self {
         Mandelbrot {
             width, height,
-            pixels:   vec![0; (width*height*3) as usize], // 3 colors - RGB
+            pixels:   vec![[0,0,0]; (width*height) as usize], // 3 colors - RGB
             range:    (0.,0.),
             pos:      (0.,0.),
             max_iter: 0,
         }
     }
 
+    pub fn get_pixels(&self) -> Vec<u8> {
+        let flat = self.pixels.clone();
+        flat.into_iter().flatten().collect::<Vec<u8>>()
+    }
+
     pub fn update(&mut self) {
-        let mut hsv = Hsv::new(0., 1., 0.);
-        for x in 0..self.width {
-            for y in 0..self.height {
-                let mut a: f32 = map::<f32>(x as f32, 0., self.width  as f32, self.range.0, self.range.1) + self.pos.0;
-                let mut b: f32 = map::<f32>(y as f32, 0., self.height as f32, self.range.0, self.range.1) + self.pos.1;
+        let width    = self.width;
+        let height   = self.height;
+        let range    = self.range;
+        let pos      = self.pos;
+        let max_iter = self.max_iter;
 
-                let ca = a;
-                let cb = b;
+        let instant = std::time::Instant::now();
+        self.pixels.par_iter_mut().enumerate().for_each(|(i, pixel)| {
+            let x: u32 = i as u32 % width;
+            let y: u32 = i as u32 / height;
+            let mut a: f64 = map::<f64>(x as f64, 0., width  as f64, range.0, range.1) + pos.0;
+            let mut b: f64 = map::<f64>(y as f64, 0., height as f64, range.0, range.1) + pos.1;
 
-                let mut iter = self.max_iter;
-                for i in 0..self.max_iter {
-                    //println!("Iter: {}", i);
-                    let aa = (a*a) - (b*b);
-                    let bb = 2.*a*b;
-                    a = aa+ca;
-                    b = bb+cb;
-                    if a+b > 16. {
-                        iter = i;
-                        break;
-                    }
+            let ca = a;
+            let cb = b;
+
+            let mut iter = max_iter;
+            for i in 0..max_iter {
+                //println!("Iter: {}", i);
+                let aa = (a*a) - (b*b);
+                let bb = 2.*a*b;
+                a = aa+ca;
+                b = bb+cb;
+                if a+b > 16. {
+                    iter = i;
+                    break;
                 }
-
-                hsv.hue   = RgbHue::from_degrees(map::<f32>(iter as f32, 0., self.max_iter as f32, 0., 359.));
-                hsv.value = if iter == self.max_iter {0.} else {1.};
-
-                let rgb: [u8; 3] = Rgb::from_color(hsv).into_format().into_raw();
-                let offset: usize = ((y*self.width*3) + (x*3)) as usize;
-                self.pixels[offset]   = rgb[0];
-                self.pixels[offset+1] = rgb[1];
-                self.pixels[offset+2] = rgb[2];
             }
-        }
+
+            let hue   = RgbHue::from_degrees(map::<f32>(iter as f32, 0., max_iter as f32, 0., 359.));
+            let value = if iter == max_iter {0.} else {1.};
+
+            *pixel = Rgb::from_color(Hsv::new(hue, 1.0, value)).into_format().into_raw();
+        });
+        println!("Elapsed: {}", instant.elapsed().as_millis());
     }
 }
 
