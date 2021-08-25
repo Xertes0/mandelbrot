@@ -26,16 +26,17 @@ fn map<T: Num + Copy>(val: T, a_min: T, a_max: T, b_min: T, b_max: T) -> T {
     (val-a_min)/(a_max-a_min) * (b_max-b_min) + b_min
 }
 
-const WIDTH:  u32 = 500;
-const HEIGHT: u32 = 500;
+const WIDTH:  u32 = 1000;
+const HEIGHT: u32 = 1000;
+const ZOOM_FACTOR:      f32 = 0.4;
+const MOV_SPEED_FACTOR: f32 = 0.925;
 
 fn draw_set(canvas: &mut Canvas<Window>, range: &(f32,f32), pos: &(f32,f32), max_iter: u32) -> Result<(), String> {
+    let mut hsv = Hsv::new(0., 1., 0.);
     for x in 0..WIDTH {
         for y in 0..HEIGHT {
-            let mut a: f32;
-            let mut b: f32;
-            a = map::<f32>(x as f32, 0., WIDTH  as f32, range.0, range.1) + pos.0;
-            b = map::<f32>(y as f32, 0., HEIGHT as f32, range.0, range.1) + pos.1;
+            let mut a: f32 = map::<f32>(x as f32, 0., WIDTH  as f32, range.0, range.1) + pos.0;
+            let mut b: f32 = map::<f32>(y as f32, 0., HEIGHT as f32, range.0, range.1) + pos.1;
 
             let ca = a;
             let cb = b;
@@ -53,11 +54,10 @@ fn draw_set(canvas: &mut Canvas<Window>, range: &(f32,f32), pos: &(f32,f32), max
                 }
             }
 
-            // TODO - optimalize
-            let hue          = map::<f32>(iter as f32, 0., max_iter as f32, 0., 359.);
-            let value        = if iter == max_iter {0.} else {1.};
-            let rgb: [u8; 3] = Rgb::from_color(Hsv::new(RgbHue::from_degrees(hue), 1., value)).into_format().into_raw();
+            hsv.hue   = RgbHue::from_degrees(map::<f32>(iter as f32, 0., max_iter as f32, 0., 359.));
+            hsv.value = if iter == max_iter {0.} else {1.};
 
+            let rgb: [u8; 3] = Rgb::from_color(hsv).into_format().into_raw();
             //println!("{} {} {}", rgb[0], rgb[1], rgb[2]);
             canvas.set_draw_color(Color::RGB(rgb[0], rgb[1], rgb[2]));
             canvas.draw_point(Point::new(x as i32,y as i32))?;
@@ -94,9 +94,6 @@ fn main() -> Result<(), String> {
     let mut zoom:      f32 = 1.;
     let mut mov_speed: f32 = 0.4;
 
-    let zoom_factor:      f32 = 0.4;
-    let mov_speed_factor: f32 = 0.925;
-
     'main: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -106,8 +103,8 @@ fn main() -> Result<(), String> {
                     ..
                 } => {
                     match key {
-                        Some(Keycode::E) => { range.0 += zoom_factor/zoom; range.1 -= zoom_factor/zoom; zoom += 1.; mov_speed *= mov_speed_factor; },
-                        Some(Keycode::Q) => { range.0 -= zoom_factor/zoom; range.1 += zoom_factor/zoom; zoom -= 1.; mov_speed /= mov_speed_factor; },
+                        Some(Keycode::E) => { range.0 += ZOOM_FACTOR/zoom; range.1 -= ZOOM_FACTOR/zoom; zoom += 1.; mov_speed *= MOV_SPEED_FACTOR; },
+                        Some(Keycode::Q) => { range.0 -= ZOOM_FACTOR/zoom; range.1 += ZOOM_FACTOR/zoom; zoom -= 1.; mov_speed /= MOV_SPEED_FACTOR; },
                         Some(Keycode::W) => { pos.1 -= mov_speed; },
                         Some(Keycode::S) => { pos.1 += mov_speed; },
                         Some(Keycode::A) => { pos.0 -= mov_speed; },
@@ -126,8 +123,8 @@ fn main() -> Result<(), String> {
         if draw {
             println!("Range:       {} {}", range.0, range.1);
             println!("Pos:         {} {}", pos.0, pos.1);
-            println!("Zoom/factor: {} {}", zoom, zoom_factor);
-            println!("Mov/factor : {} {}", mov_speed, mov_speed_factor);
+            println!("Zoom/factor: {} {}", zoom, ZOOM_FACTOR);
+            println!("Mov/factor : {} {}", mov_speed, MOV_SPEED_FACTOR);
             println!("Max iter   : {}",    max_iter);
             canvas.set_draw_color(Color::RGB(0, 0, 0));
             canvas.clear();
