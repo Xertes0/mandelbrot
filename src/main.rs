@@ -15,7 +15,7 @@ use sdl2::{
 const WIDTH:  u32 = 1000;
 const HEIGHT: u32 = 1000;
 const ZOOM_FACTOR:      f64 = 0.4;
-const MOV_SPEED_FACTOR: f64 = 0.925;
+const MOV_SPEED_FACTOR: f64 = 0.930;
 
 
 fn main() -> Result<(), String> {

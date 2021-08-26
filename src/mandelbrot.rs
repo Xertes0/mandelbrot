@@ -57,7 +57,6 @@ impl Mandelbrot {
 
             let mut iter = max_iter;
             for i in 0..max_iter {
-                //println!("Iter: {}", i);
                 let aa = (a*a) - (b*b);
                 let bb = 2.*a*b;
                 a = aa+ca;
@@ -68,8 +67,9 @@ impl Mandelbrot {
                 }
             }
 
-            let hue   = RgbHue::from_degrees(map::<f32>(iter as f32, 0., max_iter as f32, 0., 359.));
             let value = if iter == max_iter {0.} else {1.};
+            iter      = (iter as i32 - max_iter as i32).abs() as u32;
+            let hue   = RgbHue::from_degrees(map::<f32>(iter as f32, 0., max_iter as f32, 0., 359.));
 
             *pixel = Rgb::from_color(Hsv::new(hue, 1.0, value)).into_format().into_raw();
         });
