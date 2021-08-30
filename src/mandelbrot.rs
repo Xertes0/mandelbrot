@@ -14,6 +14,7 @@ use palette::{
     Pixel,
 };
 
+#[derive(Default)]
 pub struct Mandelbrot {
     pub range:    (f64,f64),
     pub pos:      (f64,f64),
@@ -23,14 +24,49 @@ pub struct Mandelbrot {
     height: u32,
 }
 
+pub struct MandelbrotBuilder {
+    mandelbrot: Mandelbrot,
+}
+
+#[allow(dead_code)]
+impl MandelbrotBuilder {
+    pub fn range(mut self, range: (f64, f64)) -> Self {
+        self.mandelbrot.range = range;
+        self
+    }
+
+    pub fn pos(mut self, pos: (f64, f64)) -> Self {
+        self.mandelbrot.pos = pos;
+        self
+    }
+
+    pub fn max_iter(mut self, max_iter: u32) -> Self {
+        self.mandelbrot.max_iter = max_iter;
+        self
+    }
+
+    pub fn build(self) -> Mandelbrot {
+        self.mandelbrot
+    }
+}
+
 impl Mandelbrot {
-    pub fn new(width: u32, height: u32) -> Self {
+    pub fn new(width: u32, height: u32) -> MandelbrotBuilder {
+        /*
         Mandelbrot {
             width, height,
             pixels:   vec![[0,0,0]; (width*height) as usize], // 3 colors - RGB
             range:    (0.,0.),
             pos:      (0.,0.),
             max_iter: 0,
+        }
+        */
+        MandelbrotBuilder {
+            mandelbrot: Mandelbrot {
+                width, height,
+                pixels:   vec![[0,0,0]; (width*height) as usize], // 3 colors - RGB
+                ..Default::default()
+            }
         }
     }
 

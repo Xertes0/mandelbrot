@@ -12,11 +12,10 @@ use sdl2::{
     keyboard::Keycode,
 };
 
-const WIDTH:  u32 = 1000;
-const HEIGHT: u32 = 1000;
+const WIDTH:  u32 = 1000; // Must be the same
+const HEIGHT: u32 = 1000; // Must be the same
 const ZOOM_FACTOR:      f64 = 0.4;
 const MOV_SPEED_FACTOR: f64 = 0.930;
-
 
 fn main() -> Result<(), String> {
     println!("Hello, world!");
@@ -35,14 +34,10 @@ fn main() -> Result<(), String> {
     let mut event_pump = sdl_context.event_pump()?;
     let mut draw = true;
 
-    let mut mandelbrot = Mandelbrot::new(WIDTH, HEIGHT);
-
-    mandelbrot.max_iter = 100;
-
-    //-0.715181 -i0.230028
-    //let mut range: (f32,f32) = (-0.715181,-0.230028);
-    mandelbrot.range = (-2.5,1.5);
-    mandelbrot.pos   = (0.,0.);
+    let mut mandelbrot = Mandelbrot::new(WIDTH, HEIGHT)
+        .max_iter(100)
+        .range((-2.5,1.5))
+        .build();
 
     let mut zoom:      f64 = 1.;
     let mut mov_speed: f64 = 0.4;
