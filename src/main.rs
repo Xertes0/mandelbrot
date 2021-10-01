@@ -39,7 +39,7 @@ fn main() -> Result<(), String> {
     let mut event_pump = sdl_context.event_pump()?;
     let mut draw = true;
 
-    let mut mandelbrot = Mandelbrot::new(WIDTH, HEIGHT)
+    let mut mandelbrot = Mandelbrot::builder(WIDTH, HEIGHT)
         .max_iter(100)
         .range((-2.5,1.5))
         .build();
