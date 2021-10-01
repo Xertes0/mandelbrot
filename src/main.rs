@@ -1,4 +1,5 @@
 extern crate sdl2;
+extern crate image;
 
 mod mandelbrot;
 use mandelbrot::Mandelbrot;
@@ -12,10 +13,14 @@ use sdl2::{
     keyboard::Keycode,
 };
 
+use std::path::Path;
+
 const WIDTH:  u32 = 1000; // Must be the same
 const HEIGHT: u32 = 1000; // Must be the same
 const ZOOM_FACTOR:      f64 = 0.4;
 const MOV_SPEED_FACTOR: f64 = 0.930;
+
+const SCREENSHOT_PATH: &str = "./screenshot.png";
 
 fn main() -> Result<(), String> {
     println!("Hello, world!");
@@ -66,6 +71,18 @@ fn main() -> Result<(), String> {
                         Some(Keycode::D) => { mandelbrot.pos.0 += mov_speed; },
                         Some(Keycode::K) => { mandelbrot.max_iter += 10; },
                         Some(Keycode::J) => { if mandelbrot.max_iter != 0 { mandelbrot.max_iter -= 10; } },
+                        Some(Keycode::Space) => {
+                            // Screenshot
+                            println!("!----- Screenshot -----!");
+                            let pixels = mandelbrot.get_pixels();
+                            image::save_buffer(
+                                Path::new(SCREENSHOT_PATH),
+                                &pixels,
+                                WIDTH,
+                                HEIGHT,
+                                image::ColorType::Rgb8
+                            ).unwrap();
+                        }
                         _ => {}
                     }
 
