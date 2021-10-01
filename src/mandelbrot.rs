@@ -1,8 +1,5 @@
-extern crate num_traits;
 extern crate palette;
 extern crate rayon;
-
-use num_traits::Num;
 
 use rayon::prelude::*;
 
@@ -25,7 +22,7 @@ pub struct Mandelbrot {
 }
 
 impl Mandelbrot {
-    pub fn new(width: u32, height: u32) -> MandelbrotBuilder {
+    pub fn builder(width: u32, height: u32) -> MandelbrotBuilder {
         MandelbrotBuilder {
             mandelbrot: Mandelbrot {
                 width, height,
@@ -103,7 +100,14 @@ impl MandelbrotBuilder {
     }
 }
 
-fn map<T: Num + Copy>(val: T, a_min: T, a_max: T, b_min: T, b_max: T) -> T {
-    // Y = (X-A)/(B-A) * (D-C) + C
+use std::ops::{Add,Sub,Div,Mul};
+fn map<T>(val: T, a_min: T, a_max: T, b_min: T, b_max: T) -> T
+where
+    T: Copy +
+        Add<Output = T> +
+        Sub<Output = T> +
+        Mul<Output = T> +
+        Div<Output = T>,
+{
     (val-a_min)/(a_max-a_min) * (b_max-b_min) + b_min
 }

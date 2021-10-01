@@ -1,13 +1,14 @@
 [package]
-name = "mandelbrot_set"
+name    = "mandelbrot_set"
 version = "0.1.0"
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 sdl2       = "0.34.5"
-num-traits = "0.2.14"
 palette    = "0.6.0"
 rayon      = "1.5.1"
 image      = "0.23.14"
+
+[profile.dev]
+# Builds with opt-level below 2 are lagging to much // Default is 0
+opt-level = 2
