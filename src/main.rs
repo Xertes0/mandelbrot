@@ -17,13 +17,12 @@ use sdl2::{
 
 use std::path::Path;
 use std::time::{Instant,Duration};
-use std::thread::{self,JoinHandle};
 use std::sync::mpsc;
 use std::collections::HashMap;
 
 const WIDTH:  u32 = 1000; // Must be the same
 const HEIGHT: u32 = 1000; // Must be the same
-const ALIA:   u32 = 3000;
+const ALIA:   u32 = 2000;
 const ZOOM_FACTOR:      f64 = 0.4;
 const MOV_SPEED_FACTOR: f64 = 0.930;
 
@@ -58,10 +57,15 @@ fn main() -> Result<(), String> {
     let mut texture = texture_creator.create_texture_static(PixelFormatEnum::RGB24, WIDTH, HEIGHT).unwrap();
     
     let mut alia_timer = Instant::now();
-    let mut alia_handle: Option<JoinHandle<()>> = None;
 
     let mut alia_rx: Option<mpsc::Receiver<Vec<u8>>> = None;
     let mut is_alia = false;
+
+    let alia_pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(2)
+        .build()
+        .unwrap();
+    let mut should_alia = true;
 
     let mut keys_pressed = HashMap::new();
 
@@ -73,8 +77,7 @@ fn main() -> Result<(), String> {
                     match key {
                         Some(Keycode::E) => { keys_pressed.insert(Keycode::E, false); },
                         Some(Keycode::Q) => { keys_pressed.insert(Keycode::Q, false); },
-                        Some(Keycode::W) => { keys_pressed.insert(Keycode::W, false); },
-                        Some(Keycode::S) => { keys_pressed.insert(Keycode::S, false); },
+                        Some(Keycode::W) => { keys_pressed.insert(Keycode::W, false); }, Some(Keycode::S) => { keys_pressed.insert(Keycode::S, false); },
                         Some(Keycode::A) => { keys_pressed.insert(Keycode::A, false); },
                         Some(Keycode::D) => { keys_pressed.insert(Keycode::D, false); },
                         Some(Keycode::K) => { keys_pressed.insert(Keycode::K, false); },
@@ -129,14 +132,13 @@ fn main() -> Result<(), String> {
                 _ => {}
             }
             draw = true;
-            is_alia = false;
         }
 
         if draw {
-            //println!("{:#?}",              mandelbrot.params());
-            //println!("Zoom/factor: {} {}", zoom, ZOOM_FACTOR);
-            //println!("Next zoom:   {}"   , ZOOM_FACTOR/zoom);
-            //println!("Mov/factor : {} {}", mov_speed, MOV_SPEED_FACTOR);
+            println!("{:#?}",              mandelbrot.params());
+            println!("Zoom/factor: {} {}", zoom, ZOOM_FACTOR);
+            println!("Next zoom:   {}"   , ZOOM_FACTOR/zoom);
+            println!("Mov/factor : {} {}", mov_speed, MOV_SPEED_FACTOR);
             canvas.set_draw_color(Color::RGB(0, 0, 0));
 
             println!("drawing");
@@ -154,45 +156,44 @@ fn main() -> Result<(), String> {
             println!("Elapsed: {}", elapsed.as_millis());
 
             draw = false;
-            alia_timer  = Instant::now();
-            alia_handle = None;
+            is_alia     = false;
+            should_alia = true;
             alia_rx     = None;
+            alia_timer  = Instant::now();
         } else {
-            if !is_alia && alia_timer.elapsed() > Duration::from_millis(200) {
-                if let None = alia_handle {
-                    println!("**************Thread created");
-                    let (tx,rx) = mpsc::channel();
-                    alia_rx = Some(rx);
-                    let mut mandelbrot_copy = mandelbrot.clone();
-                    mandelbrot_copy.set_dimension(WIDTH+ALIA,HEIGHT+ALIA);
-                    alia_handle = Some(thread::spawn(move|| {
-                        mandelbrot_copy.update();
+            if !is_alia && should_alia && alia_timer.elapsed() > Duration::from_millis(500) {
+                println!("!----- Thread created -----!");
+                let (tx,rx) = mpsc::channel();
+                alia_rx = Some(rx);
+                let mut mandelbrot_copy = mandelbrot.clone();
+                mandelbrot_copy.set_dimension(WIDTH+ALIA,HEIGHT+ALIA);
+                alia_pool.spawn(move|| {
+                    mandelbrot_copy.update();
 
-                        let mut img = image::DynamicImage::new_rgb8(WIDTH+ALIA,HEIGHT+ALIA);
+                    let mut img = image::DynamicImage::new_rgb8(WIDTH+ALIA,HEIGHT+ALIA);
 
-                        let mut iter = mandelbrot_copy.pixels().iter();
-                        for pixel in img.as_mut_rgb8().unwrap().pixels_mut() {
-                            *pixel = image::Rgb([*iter.next().unwrap(),*iter.next().unwrap(),*iter.next().unwrap()]);
-                        }
-                        let new = img.resize(WIDTH,HEIGHT,image::imageops::FilterType::Lanczos3);
-                        //let new = new.blur(0.5);
-                        //let unsharpen = new.unsharpen(0.5, -200);
-                        tx.send(new.into_bytes()).unwrap_or(());
-                    }));
-                } else {
-                    if let Some(rx) = &alia_rx {
-                        match rx.try_recv() {
-                            Ok(vec) => {
-                                println!("--------------Received alia");
-                                texture.update(None, &vec, (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
-                                canvas.copy(&texture, None, None).unwrap();
-                                canvas.present();
+                    let mut iter = mandelbrot_copy.pixels().iter();
+                    for pixel in img.as_mut_rgb8().unwrap().pixels_mut() {
+                        *pixel = image::Rgb([*iter.next().unwrap(),*iter.next().unwrap(),*iter.next().unwrap()]);
+                    }
+                    let new = img.resize(WIDTH,HEIGHT,image::imageops::FilterType::Lanczos3);
+                    //let new = new.blur(0.5);
+                    //let unsharpen = new.unsharpen(0.5, -200);
+                    tx.send(new.into_bytes()).unwrap_or(());
+                });
+                should_alia = false;
+            } else {
+                if let Some(rx) = &alia_rx {
+                    match rx.try_recv() {
+                        Ok(vec) => {
+                            println!("!----- Received alia -----!");
+                            texture.update(None, &vec, (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
+                            canvas.copy(&texture, None, None).unwrap();
+                            canvas.present();
 
-                                is_alia = true;
-                                alia_handle = None;
-                            },
-                            Err(_) => {},
-                        }
+                            is_alia = true;
+                        },
+                        Err(_) => {},
                     }
                 }
             }
