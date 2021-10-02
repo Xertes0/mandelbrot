@@ -16,6 +16,10 @@ use sdl2::{
 };
 
 use std::path::Path;
+use std::time::{Instant,Duration};
+use std::thread::{self,JoinHandle};
+use std::sync::mpsc;
+use std::collections::HashMap;
 
 const WIDTH:  u32 = 1000; // Must be the same
 const HEIGHT: u32 = 1000; // Must be the same
@@ -52,31 +56,42 @@ fn main() -> Result<(), String> {
 
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator.create_texture_static(PixelFormatEnum::RGB24, WIDTH, HEIGHT).unwrap();
+    
+    let mut alia_timer = Instant::now();
+    let mut alia_handle: Option<JoinHandle<()>> = None;
 
-    let mut img = image::DynamicImage::new_rgb8(WIDTH+ALIA,HEIGHT+ALIA);
+    let mut alia_rx: Option<mpsc::Receiver<Vec<u8>>> = None;
+    let mut is_alia = false;
 
-    let mut alia_on = false;
+    let mut keys_pressed = HashMap::new();
+
     'main: loop {
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => break 'main,
-                Event::KeyDown {
-                    keycode: key,
-                    ..
-                } => {
+                Event::KeyUp { keycode: key, .. } => {
                     match key {
-                        Some(Keycode::E) => {
-                            mandelbrot.params_mut().range.0 += ZOOM_FACTOR/zoom; mandelbrot.params_mut().range.1 -= ZOOM_FACTOR/zoom; zoom += 1.; mov_speed *= MOV_SPEED_FACTOR;
-                        },
-                        Some(Keycode::Q) => {
-                            mandelbrot.params_mut().range.0 -= ZOOM_FACTOR/zoom; mandelbrot.params_mut().range.1 += ZOOM_FACTOR/zoom; zoom -= 1.; mov_speed /= MOV_SPEED_FACTOR;
-                        },
-                        Some(Keycode::W) => { mandelbrot.params_mut().pos.1 -= mov_speed; },
-                        Some(Keycode::S) => { mandelbrot.params_mut().pos.1 += mov_speed; },
-                        Some(Keycode::A) => { mandelbrot.params_mut().pos.0 -= mov_speed; },
-                        Some(Keycode::D) => { mandelbrot.params_mut().pos.0 += mov_speed; },
-                        Some(Keycode::K) => { mandelbrot.params_mut().max_iter += 10; },
-                        Some(Keycode::J) => { if mandelbrot.params().max_iter != 0 { mandelbrot.params_mut().max_iter -= 10; } },
+                        Some(Keycode::E) => { keys_pressed.insert(Keycode::E, false); },
+                        Some(Keycode::Q) => { keys_pressed.insert(Keycode::Q, false); },
+                        Some(Keycode::W) => { keys_pressed.insert(Keycode::W, false); },
+                        Some(Keycode::S) => { keys_pressed.insert(Keycode::S, false); },
+                        Some(Keycode::A) => { keys_pressed.insert(Keycode::A, false); },
+                        Some(Keycode::D) => { keys_pressed.insert(Keycode::D, false); },
+                        Some(Keycode::K) => { keys_pressed.insert(Keycode::K, false); },
+                        Some(Keycode::J) => { keys_pressed.insert(Keycode::J, false); },
+                        _ => {}
+                    }
+                },
+                Event::KeyDown { keycode: key, .. } => {
+                    match key {
+                        Some(Keycode::E) => { keys_pressed.insert(Keycode::E, true); },
+                        Some(Keycode::Q) => { keys_pressed.insert(Keycode::Q, true); },
+                        Some(Keycode::W) => { keys_pressed.insert(Keycode::W, true); },
+                        Some(Keycode::S) => { keys_pressed.insert(Keycode::S, true); },
+                        Some(Keycode::A) => { keys_pressed.insert(Keycode::A, true); },
+                        Some(Keycode::D) => { keys_pressed.insert(Keycode::D, true); },
+                        Some(Keycode::K) => { keys_pressed.insert(Keycode::K, true); },
+                        Some(Keycode::J) => { keys_pressed.insert(Keycode::J, true); },
                         Some(Keycode::Space) => {
                             println!("!----- Screenshot -----!");
                             let pixels = mandelbrot.pixels();
@@ -88,45 +103,48 @@ fn main() -> Result<(), String> {
                                 image::ColorType::Rgb8
                             ).unwrap();
                         },
-                        Some(Keycode::F) => { alia_on = !alia_on; },
+                        //Some(Keycode::F) => { alia_on = !alia_on; },
                         _ => {}
                     }
-
-                    draw = true
                 },
                 _ => {}
             }
         }
 
+        for (key, pressed) in keys_pressed.iter() {
+            if !pressed {continue;}
+            match key {
+                Keycode::E => {
+                    mandelbrot.params_mut().range.0 += ZOOM_FACTOR/zoom; mandelbrot.params_mut().range.1 -= ZOOM_FACTOR/zoom; zoom += 1.; mov_speed *= MOV_SPEED_FACTOR;
+                },
+                Keycode::Q => {
+                    mandelbrot.params_mut().range.0 -= ZOOM_FACTOR/zoom; mandelbrot.params_mut().range.1 += ZOOM_FACTOR/zoom; zoom -= 1.; mov_speed /= MOV_SPEED_FACTOR;
+                },
+                Keycode::W => { mandelbrot.params_mut().pos.1 -= mov_speed; },
+                Keycode::S => { mandelbrot.params_mut().pos.1 += mov_speed; },
+                Keycode::A => { mandelbrot.params_mut().pos.0 -= mov_speed; },
+                Keycode::D => { mandelbrot.params_mut().pos.0 += mov_speed; },
+                Keycode::K => { mandelbrot.params_mut().max_iter += 10; },
+                Keycode::J => { if mandelbrot.params().max_iter != 0 { mandelbrot.params_mut().max_iter -= 10; } },
+                _ => {}
+            }
+            draw = true;
+            is_alia = false;
+        }
+
         if draw {
-            println!("{:#?}",              mandelbrot.params());
-            println!("Zoom/factor: {} {}", zoom, ZOOM_FACTOR);
-            println!("Next zoom:   {}"   , ZOOM_FACTOR/zoom);
-            println!("Mov/factor : {} {}", mov_speed, MOV_SPEED_FACTOR);
+            //println!("{:#?}",              mandelbrot.params());
+            //println!("Zoom/factor: {} {}", zoom, ZOOM_FACTOR);
+            //println!("Next zoom:   {}"   , ZOOM_FACTOR/zoom);
+            //println!("Mov/factor : {} {}", mov_speed, MOV_SPEED_FACTOR);
             canvas.set_draw_color(Color::RGB(0, 0, 0));
 
             println!("drawing");
-            let instant = std::time::Instant::now();
+            let instant = Instant::now();
             canvas.clear();
 
-            if alia_on {
-                mandelbrot.set_dimension(WIDTH+ALIA,HEIGHT+ALIA);
-                mandelbrot.update();
-
-                let mut iter = mandelbrot.pixels().iter();
-                for pixel in img.as_mut_rgb8().unwrap().pixels_mut() {
-                    *pixel = image::Rgb([*iter.next().unwrap(),*iter.next().unwrap(),*iter.next().unwrap()]);
-                }
-                let new = img.resize(WIDTH,HEIGHT,image::imageops::FilterType::Lanczos3);
-                //let new = new.blur(0.5);
-                //let unsharpen = new.unsharpen(0.5, -200);
-                let flat = new.as_flat_samples_u8().unwrap();
-                texture.update(None, flat.as_slice(), (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
-            } else {
-                mandelbrot.set_dimension(WIDTH,HEIGHT);
-                mandelbrot.update();
-                texture.update(None, mandelbrot.pixels(), (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
-            }
+            mandelbrot.update();
+            texture.update(None, mandelbrot.pixels(), (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
 
             canvas.copy(&texture, None, None).unwrap();
 
@@ -136,9 +154,51 @@ fn main() -> Result<(), String> {
             println!("Elapsed: {}", elapsed.as_millis());
 
             draw = false;
+            alia_timer  = Instant::now();
+            alia_handle = None;
+            alia_rx     = None;
+        } else {
+            if !is_alia && alia_timer.elapsed() > Duration::from_millis(200) {
+                if let None = alia_handle {
+                    println!("**************Thread created");
+                    let (tx,rx) = mpsc::channel();
+                    alia_rx = Some(rx);
+                    let mut mandelbrot_copy = mandelbrot.clone();
+                    mandelbrot_copy.set_dimension(WIDTH+ALIA,HEIGHT+ALIA);
+                    alia_handle = Some(thread::spawn(move|| {
+                        mandelbrot_copy.update();
+
+                        let mut img = image::DynamicImage::new_rgb8(WIDTH+ALIA,HEIGHT+ALIA);
+
+                        let mut iter = mandelbrot_copy.pixels().iter();
+                        for pixel in img.as_mut_rgb8().unwrap().pixels_mut() {
+                            *pixel = image::Rgb([*iter.next().unwrap(),*iter.next().unwrap(),*iter.next().unwrap()]);
+                        }
+                        let new = img.resize(WIDTH,HEIGHT,image::imageops::FilterType::Lanczos3);
+                        //let new = new.blur(0.5);
+                        //let unsharpen = new.unsharpen(0.5, -200);
+                        tx.send(new.into_bytes()).unwrap_or(());
+                    }));
+                } else {
+                    if let Some(rx) = &alia_rx {
+                        match rx.try_recv() {
+                            Ok(vec) => {
+                                println!("--------------Received alia");
+                                texture.update(None, &vec, (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
+                                canvas.copy(&texture, None, None).unwrap();
+                                canvas.present();
+
+                                is_alia = true;
+                                alia_handle = None;
+                            },
+                            Err(_) => {},
+                        }
+                    }
+                }
+            }
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(10));
     }
 
 
