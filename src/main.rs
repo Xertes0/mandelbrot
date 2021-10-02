@@ -1,3 +1,5 @@
+//#![feature(test)]
+
 extern crate sdl2;
 extern crate image;
 
@@ -17,6 +19,7 @@ use std::path::Path;
 
 const WIDTH:  u32 = 1000; // Must be the same
 const HEIGHT: u32 = 1000; // Must be the same
+const ALIA:   u32 = 3000;
 const ZOOM_FACTOR:      f64 = 0.4;
 const MOV_SPEED_FACTOR: f64 = 0.930;
 
@@ -50,6 +53,9 @@ fn main() -> Result<(), String> {
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator.create_texture_static(PixelFormatEnum::RGB24, WIDTH, HEIGHT).unwrap();
 
+    let mut img = image::DynamicImage::new_rgb8(WIDTH+ALIA,HEIGHT+ALIA);
+
+    let mut alia_on = false;
     'main: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -60,29 +66,29 @@ fn main() -> Result<(), String> {
                 } => {
                     match key {
                         Some(Keycode::E) => {
-                            mandelbrot.range.0 += ZOOM_FACTOR/zoom; mandelbrot.range.1 -= ZOOM_FACTOR/zoom; zoom += 1.; mov_speed *= MOV_SPEED_FACTOR;
+                            mandelbrot.params_mut().range.0 += ZOOM_FACTOR/zoom; mandelbrot.params_mut().range.1 -= ZOOM_FACTOR/zoom; zoom += 1.; mov_speed *= MOV_SPEED_FACTOR;
                         },
                         Some(Keycode::Q) => {
-                            mandelbrot.range.0 -= ZOOM_FACTOR/zoom; mandelbrot.range.1 += ZOOM_FACTOR/zoom; zoom -= 1.; mov_speed /= MOV_SPEED_FACTOR;
+                            mandelbrot.params_mut().range.0 -= ZOOM_FACTOR/zoom; mandelbrot.params_mut().range.1 += ZOOM_FACTOR/zoom; zoom -= 1.; mov_speed /= MOV_SPEED_FACTOR;
                         },
-                        Some(Keycode::W) => { mandelbrot.pos.1 -= mov_speed; },
-                        Some(Keycode::S) => { mandelbrot.pos.1 += mov_speed; },
-                        Some(Keycode::A) => { mandelbrot.pos.0 -= mov_speed; },
-                        Some(Keycode::D) => { mandelbrot.pos.0 += mov_speed; },
-                        Some(Keycode::K) => { mandelbrot.max_iter += 10; },
-                        Some(Keycode::J) => { if mandelbrot.max_iter != 0 { mandelbrot.max_iter -= 10; } },
+                        Some(Keycode::W) => { mandelbrot.params_mut().pos.1 -= mov_speed; },
+                        Some(Keycode::S) => { mandelbrot.params_mut().pos.1 += mov_speed; },
+                        Some(Keycode::A) => { mandelbrot.params_mut().pos.0 -= mov_speed; },
+                        Some(Keycode::D) => { mandelbrot.params_mut().pos.0 += mov_speed; },
+                        Some(Keycode::K) => { mandelbrot.params_mut().max_iter += 10; },
+                        Some(Keycode::J) => { if mandelbrot.params().max_iter != 0 { mandelbrot.params_mut().max_iter -= 10; } },
                         Some(Keycode::Space) => {
-                            // Screenshot
                             println!("!----- Screenshot -----!");
-                            let pixels = mandelbrot.get_pixels();
+                            let pixels = mandelbrot.pixels();
                             image::save_buffer(
                                 Path::new(SCREENSHOT_PATH),
-                                &pixels,
+                                pixels,
                                 WIDTH,
                                 HEIGHT,
                                 image::ColorType::Rgb8
                             ).unwrap();
-                        }
+                        },
+                        Some(Keycode::F) => { alia_on = !alia_on; },
                         _ => {}
                     }
 
@@ -93,21 +99,35 @@ fn main() -> Result<(), String> {
         }
 
         if draw {
-            println!("Range:       {} {}", mandelbrot.range.0, mandelbrot.range.1);
-            println!("Pos:         {} {}", mandelbrot.pos.0, mandelbrot.pos.1);
+            println!("{:#?}",              mandelbrot.params());
             println!("Zoom/factor: {} {}", zoom, ZOOM_FACTOR);
             println!("Next zoom:   {}"   , ZOOM_FACTOR/zoom);
             println!("Mov/factor : {} {}", mov_speed, MOV_SPEED_FACTOR);
-            println!("Max iter   : {}"   , mandelbrot.max_iter);
             canvas.set_draw_color(Color::RGB(0, 0, 0));
 
             println!("drawing");
             let instant = std::time::Instant::now();
             canvas.clear();
 
-            mandelbrot.update();
+            if alia_on {
+                mandelbrot.set_dimension(WIDTH+ALIA,HEIGHT+ALIA);
+                mandelbrot.update();
 
-            texture.update(None, &mandelbrot.get_pixels(), (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
+                let mut iter = mandelbrot.pixels().iter();
+                for pixel in img.as_mut_rgb8().unwrap().pixels_mut() {
+                    *pixel = image::Rgb([*iter.next().unwrap(),*iter.next().unwrap(),*iter.next().unwrap()]);
+                }
+                let new = img.resize(WIDTH,HEIGHT,image::imageops::FilterType::Lanczos3);
+                //let new = new.blur(0.5);
+                //let unsharpen = new.unsharpen(0.5, -200);
+                let flat = new.as_flat_samples_u8().unwrap();
+                texture.update(None, flat.as_slice(), (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
+            } else {
+                mandelbrot.set_dimension(WIDTH,HEIGHT);
+                mandelbrot.update();
+                texture.update(None, mandelbrot.pixels(), (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
+            }
+
             canvas.copy(&texture, None, None).unwrap();
 
             canvas.present();
@@ -118,7 +138,7 @@ fn main() -> Result<(), String> {
             draw = false;
         }
 
-        //thread::sleep(time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 
 
