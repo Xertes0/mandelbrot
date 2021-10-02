@@ -5,7 +5,6 @@ edition = "2018"
 
 [dependencies]
 sdl2       = "0.34.5"
-palette    = "0.6.0"
 rayon      = "1.5.1"
 image      = "0.23.14"
 
