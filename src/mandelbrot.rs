@@ -11,6 +11,7 @@ pub struct MandelbrotParameters {
     height: u32,
 }
 
+#[derive(Clone)]
 pub struct Mandelbrot {
     params: MandelbrotParameters,
     pixels: Vec::<u8>,
