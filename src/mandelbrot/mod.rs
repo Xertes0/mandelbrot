@@ -1,5 +1,7 @@
 extern crate rayon;
 
+mod gpu;
+
 use rayon::prelude::*;
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -49,30 +51,7 @@ impl Mandelbrot {
     }
 
     fn compute(params: &MandelbrotParameters, i: u32) -> u32 {
-        /*
-        let x: u32 = i % params.width;
-        let y: u32 = i / params.height;
-        let mut a: f64 = map::<f64>(x as f64, 0., params.width  as f64, params.range.0, params.range.1) + params.pos.0;
-        let mut b: f64 = map::<f64>(y as f64, 0., params.height as f64, params.range.0, params.range.1) + params.pos.1;
-
-        let ca = a;
-        let cb = b;
-
-        let mut iter = params.max_iter;
-        for i in 0..params.max_iter {
-            let aa = (a*a) - (b*b);
-            let bb = 2.*a*b;
-            a = aa+ca;
-            b = bb+cb;
-            if a+b > 100. {
-                iter = i;
-                break;
-            }
-        }
-
-        iter
-        */
-
+        let gpu_res = gpu::exec(params, i).unwrap();
         let x: u32 = i % params.width;
         let y: u32 = i / params.height;
         let x: f64 = map::<f64>(x as f64, 0., params.width  as f64, params.range.0, params.range.1) + params.pos.0;
@@ -88,6 +67,8 @@ impl Mandelbrot {
             x2 = x_new;
             iter += 1;
         }
+
+        assert_eq!(gpu_res, iter);
 
         iter
     }
