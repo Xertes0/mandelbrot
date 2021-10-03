@@ -62,6 +62,10 @@ impl Mandelbrot {
         &self.pixels
     }
 
+    pub fn set_pixels(&mut self, pixels: Vec<u8>) {
+        self.pixels = pixels;
+    }
+
     pub fn set_dimensions(&mut self, width: u32, height: u32) {
         self.pixels.resize((width*height*3) as usize, 0);
         self.params.width  = width;
