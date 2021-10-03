@@ -41,7 +41,7 @@ impl ShaderParameters {
 const SHADER_PATH: &str = "./shaders/shader.wgsl";
 
 pub struct GpuCompute {
-    pixel_count: usize,
+    pixel_count_mul: usize,
     device: wgpu::Device,
     queue:  wgpu::Queue,
     pixels_storage_buffer: wgpu::Buffer,
@@ -51,7 +51,7 @@ pub struct GpuCompute {
 }
 
 impl GpuCompute {
-    pub fn new(pixel_count: usize) -> Option<Self> {
+    pub fn new(pixel_count_mul: usize) -> Option<Self> {
         let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let adapter = pollster::block_on(instance
             .request_adapter(&wgpu::RequestAdapterOptions::default())
@@ -75,12 +75,12 @@ impl GpuCompute {
 
         let cs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&Self::get_shader_source(pixel_count)?)),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&Self::get_shader_source(pixel_count_mul/3)?)),
         });
 
         let pixels_storage_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Pixel Storage Buffer"),
-            contents: bytemuck::cast_slice(&vec![0u32;pixel_count]),
+            contents: bytemuck::cast_slice(&vec![[0u32,0u32,0u32];pixel_count_mul/3]),
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC,
@@ -117,7 +117,7 @@ impl GpuCompute {
         });
 
         Some(Self{
-            pixel_count,
+            pixel_count_mul,
             device,
             queue,
             pixels_storage_buffer,
@@ -130,14 +130,14 @@ impl GpuCompute {
     pub fn compute(&mut self, params: &MandelbrotParameters) -> Option<Vec<u32>> {
         let params = ShaderParameters::new(params);
         self.queue.write_buffer(&self.params_storage_buffer,0,bytemuck::bytes_of(&params));
-        pollster::block_on(self.execute_gpu_inner(self.pixel_count))
+        pollster::block_on(self.execute_gpu_inner(self.pixel_count_mul))
     }
 
-    async fn execute_gpu_inner(&mut self, pixel_count: usize) -> Option<Vec<u32>> {
-        let slice_size = pixel_count * std::mem::size_of::<u32>();
+    async fn execute_gpu_inner(&mut self, pixel_count_mul: usize) -> Option<Vec<u32>> {
+        let slice_size = pixel_count_mul * std::mem::size_of::<u32>();
         let size = slice_size as wgpu::BufferAddress;
 
-        let pixels_size = (std::mem::size_of::<u32>() * self.pixel_count) as wgpu::BufferAddress;
+        let pixels_size = (std::mem::size_of::<u32>() * self.pixel_count_mul) as wgpu::BufferAddress;
         let pixels_staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size:  pixels_size,
@@ -152,7 +152,7 @@ impl GpuCompute {
             cpass.set_pipeline(&self.compute_pipeline);
             cpass.set_bind_group(0, &self.bind_group, &[]);
             cpass.insert_debug_marker("Mandelbrot");
-            cpass.dispatch((self.pixel_count/3) as u32, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
+            cpass.dispatch((self.pixel_count_mul/3) as u32, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
         }
 
         encoder.copy_buffer_to_buffer(&self.pixels_storage_buffer, 0, &pixels_staging_buffer, 0, size);
@@ -177,9 +177,10 @@ impl GpuCompute {
 
     fn get_shader_source(pixel_count: usize) -> Option<String> {
         let shader = std::fs::read_to_string(Path::new(SHADER_PATH)).ok()?;
+        println!("Replaced for {}", pixel_count);
         Some(shader
             .split(' ')
-            .map(|x| {if x == "PIXEL_COUNT" {(pixel_count/3).to_string()} else {String::from(x)}})
+            .map(|x| {if x == "PIXEL_COUNT" {(pixel_count).to_string()} else {String::from(x)}})
             .collect::<Vec<String>>()
             .join(" ")
         )
