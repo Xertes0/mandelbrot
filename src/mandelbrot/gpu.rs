@@ -127,7 +127,7 @@ impl GpuCompute {
         })
     }
 
-    pub fn run(&mut self, params: &MandelbrotParameters) -> Option<Vec<u32>> {
+    pub fn compute(&mut self, params: &MandelbrotParameters) -> Option<Vec<u32>> {
         let params = ShaderParameters::new(params);
         self.queue.write_buffer(&self.params_storage_buffer,0,bytemuck::bytes_of(&params));
         pollster::block_on(self.execute_gpu_inner(self.pixel_count))

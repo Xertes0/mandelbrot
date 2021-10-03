@@ -6,6 +6,14 @@ extern crate image;
 mod mandelbrot;
 use mandelbrot::Mandelbrot;
 
+#[cfg(not(no_gpu))]
+use mandelbrot::gpu::GpuCompute;
+
+use mandelbrot::compute::Compute;
+use mandelbrot::compute::ComputeCPU;
+#[cfg(not(no_gpu))]
+use mandelbrot::compute::ComputeGPU;
+
 use sdl2::{
     pixels::{
         Color,
@@ -15,6 +23,8 @@ use sdl2::{
     keyboard::Keycode,
 };
 
+#[cfg(not(no_gpu))]
+use std::sync::{Arc,Mutex};
 use std::path::Path;
 use std::time::{Instant,Duration};
 use std::sync::mpsc;
@@ -72,6 +82,10 @@ fn main() -> Result<(), String> {
 
     let mut alia_on = false;
 
+    #[cfg(not(no_gpu))]
+    let alia_gpu_compute: Arc<Mutex<GpuCompute>> =
+        Arc::new(Mutex::new(GpuCompute::new(((WIDTH+ALIA)*(HEIGHT+ALIA)*3) as usize).unwrap()));
+
     'main: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -111,7 +125,6 @@ fn main() -> Result<(), String> {
                                 image::ColorType::Rgb8
                             ).unwrap();
                         },
-                        //Some(Keycode::F) => { alia_on = !alia_on; },
                         _ => {}
                     }
                 },
@@ -176,16 +189,35 @@ fn main() -> Result<(), String> {
                 println!("!----- Thread created -----!");
                 let (tx,rx) = mpsc::channel();
                 alia_rx = Some(rx);
-                let mut mandelbrot_copy = mandelbrot.clone();
-                mandelbrot_copy.set_dimension(WIDTH+ALIA,HEIGHT+ALIA);
-                alia_pool.spawn(move|| {
-                    mandelbrot_copy.update();
 
+                #[cfg(not(no_gpu))]
+                let mut compute: Box<dyn Compute+Send> = if mandelbrot.on_gpu {
+                    let mut params = mandelbrot.params().clone();
+                    params.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
+                    Box::new(ComputeGPU::new(params, Arc::clone(&alia_gpu_compute)))
+                } else {
+                    let mut mandelbrot_copy = mandelbrot.clone();
+                    mandelbrot_copy.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
+                    Box::new(ComputeCPU::new(mandelbrot_copy))
+                };
+                #[cfg(no_gpu)]
+                let mut mandelbrot_copy = mandelbrot.clone();
+                #[cfg(no_gpu)]
+                mandelbrot_copy.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
+                #[cfg(no_gpu)]
+                let mut compute = ComputeCPU::new(mandelbrot_copy);
+
+                alia_pool.spawn(move|| {
                     let mut img = image::DynamicImage::new_rgb8(WIDTH+ALIA,HEIGHT+ALIA);
 
-                    let mut iter = mandelbrot_copy.pixels().iter();
+                    let pixels = compute.compute();
+                    let mut iter = pixels.iter();
                     for pixel in img.as_mut_rgb8().unwrap().pixels_mut() {
-                        *pixel = image::Rgb([*iter.next().unwrap(),*iter.next().unwrap(),*iter.next().unwrap()]);
+                        *pixel = image::Rgb([
+                            *iter.next().unwrap(),
+                            *iter.next().unwrap(),
+                            *iter.next().unwrap()
+                        ]);
                     }
                     let new = img.resize(WIDTH,HEIGHT,image::imageops::FilterType::Lanczos3);
                     //let new = new.blur(0.5);

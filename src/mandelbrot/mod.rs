@@ -1,9 +1,11 @@
 extern crate rayon;
 
 #[cfg(not(no_gpu))]
-mod gpu;
+pub mod gpu;
 #[cfg(not(no_gpu))]
 use gpu::GpuCompute;
+
+pub mod compute;
 
 use rayon::prelude::*;
 
@@ -14,6 +16,14 @@ pub struct MandelbrotParameters {
     pub max_iter: u32,
     width:  u32,
     height: u32,
+}
+
+#[cfg(not(no_gpu))]
+impl MandelbrotParameters {
+    pub fn set_dimensions(&mut self, width: u32, height: u32) {
+        self.width  = width;
+        self.height = height;
+    }
 }
 
 pub struct Mandelbrot {
@@ -52,15 +62,24 @@ impl Mandelbrot {
         &self.pixels
     }
 
-    pub fn set_dimension(&mut self, width: u32, height: u32) {
+    pub fn set_dimensions(&mut self, width: u32, height: u32) {
         self.pixels.resize((width*height*3) as usize, 0);
         self.params.width  = width;
         self.params.height = height;
     }
 
+    pub fn update(&mut self) {
+        #[cfg(not(no_gpu))]
+        if self.on_gpu && self.gpu_compute.is_some() {
+            self.update_gpu();
+            return;
+        }
+        self.update_cpu();
+    }
+
     #[cfg(not(no_gpu))]
     fn update_gpu(&mut self) {
-        let gpu_out = self.gpu_compute.as_mut().unwrap().run(&self.params).unwrap();
+        let gpu_out = self.gpu_compute.as_mut().unwrap().compute(&self.params).unwrap();
         self.pixels = gpu_out.iter().map(|x| *x as u8).collect::<Vec<u8>>();
     }
     
@@ -112,27 +131,6 @@ impl Mandelbrot {
             (8.5*(1.-normalized)*(1.-normalized)*(1.-normalized) * normalized*255.) as u8
         ]
     }
-
-    pub fn update(&mut self) {
-        #[cfg(not(no_gpu))]
-        if self.on_gpu && self.gpu_compute.is_some() {
-            self.update_gpu();
-            return;
-        }
-        self.update_cpu();
-    }
-}
-
-impl Clone for Mandelbrot {
-    fn clone(&self) -> Self {
-        Self{
-            params: self.params.clone(),
-            pixels: self.pixels.clone(),
-            on_gpu: false,
-            #[cfg(not(no_gpu))]
-            gpu_compute: None,
-        }
-    }
 }
 
 pub struct MandelbrotBuilder {
@@ -152,6 +150,18 @@ impl MandelbrotBuilder {
 
     pub fn build(self) -> Mandelbrot {
         self.mandelbrot
+    }
+}
+
+impl Clone for Mandelbrot {
+    fn clone(&self) -> Self {
+        Self{
+            params: self.params.clone(),
+            pixels: self.pixels.clone(),
+            on_gpu: false,
+            #[cfg(not(no_gpu))]
+            gpu_compute: None,
+        }
     }
 }
 
