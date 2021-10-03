@@ -235,7 +235,8 @@ fn main() -> Result<(), String> {
                     match rx.try_recv() {
                         Ok(vec) => {
                             println!("!----- Received alia -----!");
-                            texture.update(None, &vec, (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
+                            mandelbrot.set_pixels(vec);
+                            texture.update(None, mandelbrot.pixels(), (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
                             canvas.copy(&texture, None, None).unwrap();
                             canvas.present();
 
