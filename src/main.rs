@@ -23,8 +23,9 @@ use std::collections::HashMap;
 const WIDTH:  u32 = 1000; // Must be the same
 const HEIGHT: u32 = 1000; // Must be the same
 const ALIA:   u32 = 2000;
-const ZOOM_FACTOR:      f64 = 0.4;
-const MOV_SPEED_FACTOR: f64 = 0.930;
+const ZOOM_FACTOR:      f64 = 0.95;
+const MOV_SPEED_FACTOR: f64 = 0.95;
+const MOVEMENT_SPEED_DEFAULT: f64 = 0.5;
 
 const SCREENSHOT_PATH: &str = "./screenshot.png";
 
@@ -47,11 +48,11 @@ fn main() -> Result<(), String> {
 
     let mut mandelbrot = Mandelbrot::builder(WIDTH, HEIGHT)
         .max_iter(100)
-        .range((-2.5,1.5))
+        .range((-2.5,2.5))
         .build();
 
     let mut zoom:      f64 = 1.;
-    let mut mov_speed: f64 = 0.4;
+    let mut mov_speed: f64 = MOVEMENT_SPEED_DEFAULT;
 
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator.create_texture_static(PixelFormatEnum::RGB24, WIDTH, HEIGHT).unwrap();
@@ -69,7 +70,7 @@ fn main() -> Result<(), String> {
 
     let mut keys_pressed = HashMap::new();
 
-    let mut alia_on = true;
+    let mut alia_on = false;
 
     'main: loop {
         for event in event_pump.poll_iter() {
@@ -122,10 +123,16 @@ fn main() -> Result<(), String> {
             if !pressed {continue;}
             match key {
                 Keycode::E => {
-                    mandelbrot.params_mut().range.0 += ZOOM_FACTOR/zoom; mandelbrot.params_mut().range.1 -= ZOOM_FACTOR/zoom; zoom += 1.; mov_speed *= MOV_SPEED_FACTOR;
+                    mandelbrot.params_mut().range.0 *= ZOOM_FACTOR;
+                    mandelbrot.params_mut().range.1 *= ZOOM_FACTOR;
+                    zoom += 1.;
+                    mov_speed *= MOV_SPEED_FACTOR;
                 },
                 Keycode::Q => {
-                    mandelbrot.params_mut().range.0 -= ZOOM_FACTOR/zoom; mandelbrot.params_mut().range.1 += ZOOM_FACTOR/zoom; zoom -= 1.; mov_speed /= MOV_SPEED_FACTOR;
+                    mandelbrot.params_mut().range.0 /= ZOOM_FACTOR;
+                    mandelbrot.params_mut().range.1 /= ZOOM_FACTOR;
+                    zoom -= 1.;
+                    mov_speed /= MOV_SPEED_FACTOR;
                 },
                 Keycode::W => { mandelbrot.params_mut().pos.1 -= mov_speed; },
                 Keycode::S => { mandelbrot.params_mut().pos.1 += mov_speed; },
