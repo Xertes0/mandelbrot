@@ -32,7 +32,9 @@ use std::collections::HashMap;
 
 const WIDTH:  u32 = 1000; // Must be the same
 const HEIGHT: u32 = 1000; // Must be the same
-const ALIA:   u32 = 2000;
+// Because wgsl dosen't support u8 we need to use u32 thus allocating 4 times more memory
+// And limiting the mandelbrot to 3344 by 3344
+const ALIA: u32 = 2344; // WIDTH+ALIA and HEIGHT+ALIA cannot be greater than 3344
 const ZOOM_FACTOR:      f64 = 0.95;
 const MOV_SPEED_FACTOR: f64 = 0.95;
 const MOVEMENT_SPEED_DEFAULT: f64 = 0.5;
@@ -41,6 +43,7 @@ const SCREENSHOT_PATH: &str = "./screenshot.png";
 
 fn main() -> Result<(), String> {
     println!("Hello, world!");
+    assert!(ALIA <= 2344, "ALIA has to be <= to 2344. See comments for explanation");
     
     let sdl_context = sdl2::init()?;
     let vid_subsys = sdl_context.video()?;
@@ -80,7 +83,7 @@ fn main() -> Result<(), String> {
 
     let mut keys_pressed = HashMap::new();
 
-    let mut alia_on = false;
+    let mut alia_on = true;
 
     #[cfg(not(no_gpu))]
     let alia_gpu_compute: Arc<Mutex<GpuCompute>> =
@@ -112,7 +115,7 @@ fn main() -> Result<(), String> {
                         Some(Keycode::D) => { keys_pressed.insert(Keycode::D, true); },
                         Some(Keycode::K) => { keys_pressed.insert(Keycode::K, true); },
                         Some(Keycode::J) => { keys_pressed.insert(Keycode::J, true); },
-                        Some(Keycode::R) => { alia_on = !alia_on; },
+                        Some(Keycode::R) => { alia_on = !alia_on; should_alia = true; },
                         Some(Keycode::G) => { mandelbrot.on_gpu = !mandelbrot.on_gpu; },
                         Some(Keycode::Space) => {
                             println!("!----- Screenshot -----!");
@@ -177,7 +180,7 @@ fn main() -> Result<(), String> {
             canvas.present();
             let elapsed = instant.elapsed();
             println!("frame");
-            println!("Elapsed: {}", elapsed.as_millis());
+            println!("Elapsed: {:?}", elapsed);
 
             draw = false;
             is_alia     = false;
@@ -208,6 +211,7 @@ fn main() -> Result<(), String> {
                 let mut compute = ComputeCPU::new(mandelbrot_copy);
 
                 alia_pool.spawn(move|| {
+                    let now = Instant::now();
                     let mut img = image::DynamicImage::new_rgb8(WIDTH+ALIA,HEIGHT+ALIA);
 
                     let pixels = compute.compute();
@@ -223,6 +227,7 @@ fn main() -> Result<(), String> {
                     //let new = new.blur(0.5);
                     //let unsharpen = new.unsharpen(0.5, -200);
                     tx.send(new.into_bytes()).unwrap_or(());
+                    println!("Alia elapsed: {:?}", now.elapsed());
                 });
                 should_alia = false;
             } else {
