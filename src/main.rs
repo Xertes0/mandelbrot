@@ -69,6 +69,8 @@ fn main() -> Result<(), String> {
 
     let mut keys_pressed = HashMap::new();
 
+    let mut alia_on = true;
+
     'main: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -95,6 +97,8 @@ fn main() -> Result<(), String> {
                         Some(Keycode::D) => { keys_pressed.insert(Keycode::D, true); },
                         Some(Keycode::K) => { keys_pressed.insert(Keycode::K, true); },
                         Some(Keycode::J) => { keys_pressed.insert(Keycode::J, true); },
+                        Some(Keycode::R) => { alia_on = !alia_on; },
+                        Some(Keycode::G) => { mandelbrot.on_gpu = !mandelbrot.on_gpu; },
                         Some(Keycode::Space) => {
                             println!("!----- Screenshot -----!");
                             let pixels = mandelbrot.pixels();
@@ -161,7 +165,7 @@ fn main() -> Result<(), String> {
             alia_rx     = None;
             alia_timer  = Instant::now();
         } else {
-            if !is_alia && should_alia && alia_timer.elapsed() > Duration::from_millis(500) {
+            if alia_on && !is_alia && should_alia && alia_timer.elapsed() > Duration::from_millis(500) {
                 println!("!----- Thread created -----!");
                 let (tx,rx) = mpsc::channel();
                 alia_rx = Some(rx);
