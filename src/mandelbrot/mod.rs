@@ -1,6 +1,8 @@
 extern crate rayon;
 
+#[cfg(not(no_gpu))]
 mod gpu;
+#[cfg(not(no_gpu))]
 use gpu::GpuCompute;
 
 use rayon::prelude::*;
@@ -17,8 +19,9 @@ pub struct MandelbrotParameters {
 pub struct Mandelbrot {
     params: MandelbrotParameters,
     pixels: Vec::<u8>,
-    gpu_compute: Option<GpuCompute>,
     pub on_gpu: bool,
+    #[cfg(not(no_gpu))]
+    gpu_compute: Option<GpuCompute>,
 }
 
 impl Mandelbrot {
@@ -30,8 +33,9 @@ impl Mandelbrot {
                     ..Default::default()
                 },
                 pixels: vec![0u8;(width*height*3) as usize], // 3 colors RGB
-                gpu_compute: GpuCompute::new((width*height*3) as usize),
                 on_gpu: true,
+                #[cfg(not(no_gpu))]
+                gpu_compute: GpuCompute::new((width*height*3) as usize),
             }
         }
     }
@@ -54,9 +58,27 @@ impl Mandelbrot {
         self.params.height = height;
     }
 
-    fn compute_gpu(&mut self) {
+    #[cfg(not(no_gpu))]
+    fn update_gpu(&mut self) {
         let gpu_out = self.gpu_compute.as_mut().unwrap().run(&self.params).unwrap();
         self.pixels = gpu_out.iter().map(|x| *x as u8).collect::<Vec<u8>>();
+    }
+    
+    fn update_cpu(&mut self) {
+        let params = self.params;
+
+        self.pixels.par_iter_mut().enumerate().step_by(3).for_each(|(i, pixel)| {
+            let iter = Self::compute(&params, (i/3) as u32);
+            let color = Self::color(iter, params.max_iter);
+
+            unsafe {
+                let pixel = pixel as *mut u8;
+
+                *pixel          = color[0];
+                *(pixel.add(1)) = color[1];
+                *(pixel.add(2)) = color[2];
+            }
+        });
     }
 
     fn compute(params: &MandelbrotParameters, i: u32) -> u32 {
@@ -92,24 +114,12 @@ impl Mandelbrot {
     }
 
     pub fn update(&mut self) {
+        #[cfg(not(no_gpu))]
         if self.on_gpu && self.gpu_compute.is_some() {
-            self.compute_gpu();
-        } else {
-            let params = self.params;
-
-            self.pixels.par_iter_mut().enumerate().step_by(3).for_each(|(i, pixel)| {
-                let iter = Self::compute(&params, (i/3) as u32);
-                let color = Self::color(iter, params.max_iter);
-
-                unsafe {
-                    let pixel = pixel as *mut u8;
-
-                    *pixel          = color[0];
-                    *(pixel.add(1)) = color[1];
-                    *(pixel.add(2)) = color[2];
-                }
-            });
+            self.update_gpu();
+            return;
         }
+        self.update_cpu();
     }
 }
 
@@ -118,8 +128,9 @@ impl Clone for Mandelbrot {
         Self{
             params: self.params.clone(),
             pixels: self.pixels.clone(),
-            gpu_compute: None,
             on_gpu: false,
+            #[cfg(not(no_gpu))]
+            gpu_compute: None,
         }
     }
 }

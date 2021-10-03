@@ -10,12 +10,12 @@ struct MandelbrotParameters {
 };
 
 [[block]]
-struct Iters {
-    data: array<array<u32,3>,1000000>;
+struct Pixels {
+    data: array<array<u32,3>, PIXEL_COUNT >;
 };
 
 [[group(0), binding(0)]]
-var<storage, read_write> v_iters: Iters;
+var<storage, read_write> v_pixels: Pixels;
 
 [[group(0), binding(1)]]
 var<storage, read_write> v_params: MandelbrotParameters;
@@ -58,6 +58,6 @@ fn compute(index: u32) -> array<u32,3>{
 
 [[stage(compute), workgroup_size(1)]]
 fn main([[builtin(global_invocation_id)]] global_id: vec3<u32>) {
-    v_iters.data[global_id.x] = compute(global_id.x);
+    v_pixels.data[global_id.x] = compute(global_id.x);
     //v_indices.data[123] = compute(global_id.x);
 }
