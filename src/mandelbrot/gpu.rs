@@ -7,6 +7,8 @@ use wgpu::util::DeviceExt;
 
 use super::MandelbrotParameters;
 
+use std::path::Path;
+
 #[allow(dead_code)]
 #[derive(Clone, Copy, Default)]
 struct ShaderParameters{
@@ -35,6 +37,8 @@ impl ShaderParameters {
         }
     }
 }
+
+const SHADER_PATH: &str = "./shaders/shader.wgsl";
 
 pub struct GpuCompute {
     pixels_len: usize,
@@ -71,7 +75,7 @@ impl GpuCompute {
 
         let cs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&std::fs::read_to_string("shader.wgsl").ok()?)),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&std::fs::read_to_string(Path::new(SHADER_PATH)).ok()?)),
         });
 
         let pixels_storage_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
