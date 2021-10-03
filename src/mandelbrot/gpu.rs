@@ -7,12 +7,13 @@ use wgpu::util::DeviceExt;
 
 use super::MandelbrotParameters;
 
-#[derive(Clone, Copy)]
+#[allow(dead_code)]
+#[derive(Clone, Copy, Default)]
 struct ShaderParameters{
-	range_min: f64,
-	range_max: f64,
-	pos_x:     f64,
-	pos_y:     f64,
+	range_min: f32,
+	range_max: f32,
+	pos_x:     f32,
+	pos_y:     f32,
     max_iter:  u32,
     width:     u32,
     height:    u32,
@@ -24,10 +25,10 @@ unsafe impl bytemuck::Pod for ShaderParameters {}
 impl ShaderParameters {
     pub fn new(params: &MandelbrotParameters) -> Self {
         Self {
-            range_min: params.range.0,
-            range_max: params.range.1,
-            pos_x:     params.pos.0,
-            pos_y:     params.pos.1,
+            range_min: params.range.0 as f32,
+            range_max: params.range.1 as f32,
+            pos_x:     params.pos.0 as f32,
+            pos_y:     params.pos.1 as f32,
             max_iter:  params.max_iter,
             width:     params.width,
             height:    params.height,
@@ -35,172 +36,138 @@ impl ShaderParameters {
     }
 }
 
-async fn run(params: &MandelbrotParameters, i: u32) -> Option<u32> {
-    execute_gpu(&ShaderParameters::new(params), i).await
+pub struct GpuCompute {
+    pixels_len: usize,
+    device: wgpu::Device,
+    queue:  wgpu::Queue,
+    pixels_storage_buffer: wgpu::Buffer,
+    params_storage_buffer: wgpu::Buffer,
+    compute_pipeline: wgpu::ComputePipeline,
+    bind_group:       wgpu::BindGroup,
 }
 
-async fn execute_gpu(params: &ShaderParameters, i: u32) -> Option<u32> {
-    // Instantiates instance of WebGPU
-    let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+impl GpuCompute {
+    pub fn new(pixels_len: usize) -> Option<Self> {
+        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+        let adapter = pollster::block_on(instance
+            .request_adapter(&wgpu::RequestAdapterOptions::default())
+            )?;
 
-    // `request_adapter` instantiates the general connection to the GPU
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions::default())
-        .await?;
+        let (device, queue) = pollster::block_on(adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: None,
+                    features: wgpu::Features::empty(),
+                    limits: wgpu::Limits::downlevel_defaults(),
+                },
+                None,
+            )).ok()?;
 
-    // `request_device` instantiates the feature specific connection to the GPU, defining some parameters,
-    //  `features` being the available features.
-    let (device, queue) = adapter
-        .request_device(
-            &wgpu::DeviceDescriptor {
-                label: None,
-                features: wgpu::Features::empty(),
-                limits: wgpu::Limits::downlevel_defaults(),
-            },
-            None,
-        )
-        .await
-        .unwrap();
+        let info = adapter.get_info();
+        // Example does this for some reason
+        if info.vendor == 0x10005 {
+            return None;
+        }
 
-    let info = adapter.get_info();
-    // skip this on LavaPipe temporarily
-    if info.vendor == 0x10005 {
-        return None;
+        let cs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&std::fs::read_to_string("shader.wgsl").ok()?)),
+        });
+
+        let pixels_storage_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Pixel Storage Buffer"),
+            contents: bytemuck::cast_slice(&vec![0u32;pixels_len]),
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+        });
+
+        let params_storage_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Params Storage Buffer"),
+            contents: bytemuck::bytes_of(&ShaderParameters::default()),
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: None,
+            layout: None,
+            module: &cs_module,
+            entry_point: "main",
+        });
+
+        let bind_group_layout = compute_pipeline.get_bind_group_layout(0);
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: pixels_storage_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: params_storage_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        Some(Self{
+            pixels_len,
+            device,
+            queue,
+            pixels_storage_buffer,
+            params_storage_buffer,
+            compute_pipeline,
+            bind_group,
+        })
     }
 
-    execute_gpu_inner(&device, &queue, params, i).await
-}
-
-async fn execute_gpu_inner(
-    device: &wgpu::Device,
-    queue:  &wgpu::Queue,
-    params: &ShaderParameters,
-    i: u32
-) -> Option<u32> {
-    // Loads the shader from WGSL
-    let cs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
-    });
-
-    // Gets the size in bytes of the buffer.
-    //let slice_size = numbers.len() * std::mem::size_of::<u32>();
-    //let size = slice_size as wgpu::BufferAddress;
-
-    // Instantiates buffer without data.
-    // `usage` of buffer specifies how it can be used:
-    //   `BufferUsages::MAP_READ` allows it to be read (outside the shader).
-    //   `BufferUsages::COPY_DST` allows it to be the destination of the copy.
-    let i_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: None,
-        size:  std::mem::size_of::<u32>() as u64,
-        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
-    // Instantiates buffer with data (`numbers`).
-    // Usage allowing the buffer to be:
-    //   A storage buffer (can be bound within a bind group and thus available to a shader).
-    //   The destination of a copy.
-    //   The source of a copy.
-    let i_storage_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Storage Buffer"),
-        contents: bytemuck::bytes_of(&i),
-        usage: wgpu::BufferUsages::STORAGE
-            | wgpu::BufferUsages::COPY_DST
-            | wgpu::BufferUsages::COPY_SRC,
-    });
-
-    let params_storage_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Storage Buffer"),
-        contents: bytemuck::bytes_of(params),
-        usage: wgpu::BufferUsages::STORAGE
-            | wgpu::BufferUsages::COPY_DST
-            | wgpu::BufferUsages::COPY_SRC,
-    });
-
-    // A bind group defines how buffers are accessed by shaders.
-    // It is to WebGPU what a descriptor set is to Vulkan.
-    // `binding` here refers to the `binding` of a buffer in the shader (`layout(set = 0, binding = 0) buffer`).
-
-    // A pipeline specifies the operation of a shader
-
-    // Instantiates the pipeline.
-    let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: None,
-        layout: None,
-        module: &cs_module,
-        entry_point: "main",
-    });
-
-    // Instantiates the bind group, once again specifying the binding of buffers.
-    let bind_group_layout = compute_pipeline.get_bind_group_layout(0);
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: &bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: i_storage_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: params_storage_buffer.as_entire_binding(),
-            },
-        ],
-    });
-
-    // A command encoder executes one or many pipelines.
-    // It is to WebGPU what a command buffer is to Vulkan.
-    let mut encoder =
-        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    {
-        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-        cpass.set_pipeline(&compute_pipeline);
-        cpass.set_bind_group(0, &bind_group, &[]);
-        cpass.insert_debug_marker("compute collatz iterations");
-        cpass.dispatch(/*numbers.len() as u32*/ 1, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
+    pub fn run(&mut self, params: &MandelbrotParameters) -> Option<Vec<u32>> {
+        let params = ShaderParameters::new(params);
+        self.queue.write_buffer(&self.params_storage_buffer,0,bytemuck::bytes_of(&params));
+        pollster::block_on(self.execute_gpu_inner(self.pixels_len))
     }
-    // Sets adds copy operation to command encoder.
-    // Will copy data from storage buffer on GPU to staging buffer on CPU.
-    encoder.copy_buffer_to_buffer(&i_storage_buffer,      0, &i_staging_buffer,      0, std::mem::size_of::<u64>() as u64);
 
-    // Submits command encoder for processing
-    queue.submit(Some(encoder.finish()));
+    async fn execute_gpu_inner(&mut self, pixel_len: usize) -> Option<Vec<u32>> {
+        let slice_size = pixel_len * std::mem::size_of::<u32>();
+        let size = slice_size as wgpu::BufferAddress;
 
-    // Note that we're not calling `.await` here.
-    let buffer_slice = i_staging_buffer.slice(..);
-    // Gets the future representing when `staging_buffer` can be read from
-    let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
+        let pixels_size = (std::mem::size_of::<u32>() * self.pixels_len) as wgpu::BufferAddress;
+        let pixels_staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size:  pixels_size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
-    // Poll the device in a blocking manner so that our future resolves.
-    // In an actual application, `device.poll(...)` should
-    // be called in an event loop or on another thread.
-    device.poll(wgpu::Maintain::Wait);
+        let mut encoder =
+            self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        {
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            cpass.set_pipeline(&self.compute_pipeline);
+            cpass.set_bind_group(0, &self.bind_group, &[]);
+            cpass.insert_debug_marker("Mandelbrot");
+            cpass.dispatch((self.pixels_len/3) as u32, 1, 1); // Number of cells to run, the (x,y,z) size of item being processed
+        }
 
-    // Awaits until `buffer_future` can be read from
-    if let Ok(()) = buffer_future.await {
-        // Gets contents of buffer
-        let data = buffer_slice.get_mapped_range();
-        // Since contents are got in bytes, this converts these bytes back to u32
-        let result = *bytemuck::from_bytes::<u32>(&data);
+        encoder.copy_buffer_to_buffer(&self.pixels_storage_buffer, 0, &pixels_staging_buffer, 0, size);
+        self.queue.submit(Some(encoder.finish()));
 
-        // With the current interface, we have to make sure all mapped views are
-        // dropped before we unmap the buffer.
-        drop(data);
-        i_staging_buffer.unmap(); // Unmaps buffer from memory
-                                // If you are familiar with C++ these 2 lines can be thought of similarly to:
-                                //   delete myPointer;
-                                //   myPointer = NULL;
-                                // It effectively frees the memory
+        let buffer_slice = pixels_staging_buffer.slice(..);
+        let buffer_future = buffer_slice.map_async(wgpu::MapMode::Read);
 
-        // Returns data from buffer
-        Some(result)
-    } else {
-        panic!("failed to run compute on gpu!")
+        self.device.poll(wgpu::Maintain::Wait);
+
+        if let Ok(()) = buffer_future.await {
+            let data = buffer_slice.get_mapped_range();
+            let result = bytemuck::cast_slice(&data).to_vec();
+
+            drop(data);
+            pixels_staging_buffer.unmap();
+            Some(result)
+        } else {
+            None
+        }
     }
-}
-
-pub fn exec(params: &MandelbrotParameters, i: u32) -> Option<u32> {
-    pollster::block_on(run(params, i))
 }

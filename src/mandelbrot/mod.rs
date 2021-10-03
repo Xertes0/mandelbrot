@@ -1,6 +1,7 @@
 extern crate rayon;
 
 mod gpu;
+use gpu::GpuCompute;
 
 use rayon::prelude::*;
 
@@ -13,10 +14,11 @@ pub struct MandelbrotParameters {
     height: u32,
 }
 
-#[derive(Clone)]
 pub struct Mandelbrot {
     params: MandelbrotParameters,
     pixels: Vec::<u8>,
+    gpu_compute: Option<GpuCompute>,
+    pub on_gpu: bool,
 }
 
 impl Mandelbrot {
@@ -28,6 +30,8 @@ impl Mandelbrot {
                     ..Default::default()
                 },
                 pixels: vec![0u8;(width*height*3) as usize], // 3 colors RGB
+                gpu_compute: GpuCompute::new((width*height*3) as usize),
+                on_gpu: true,
             }
         }
     }
@@ -50,8 +54,12 @@ impl Mandelbrot {
         self.params.height = height;
     }
 
+    fn compute_gpu(&mut self) {
+        let gpu_out = self.gpu_compute.as_mut().unwrap().run(&self.params).unwrap();
+        self.pixels = gpu_out.iter().map(|x| *x as u8).collect::<Vec<u8>>();
+    }
+
     fn compute(params: &MandelbrotParameters, i: u32) -> u32 {
-        let gpu_res = gpu::exec(params, i).unwrap();
         let x: u32 = i % params.width;
         let y: u32 = i / params.height;
         let x: f64 = map::<f64>(x as f64, 0., params.width  as f64, params.range.0, params.range.1) + params.pos.0;
@@ -68,8 +76,6 @@ impl Mandelbrot {
             iter += 1;
         }
 
-        assert_eq!(gpu_res, iter);
-
         iter
     }
 
@@ -77,13 +83,6 @@ impl Mandelbrot {
         //let value = if iter == max_iter {0.} else {1.};
         //let iter  = (iter as i32 - max_iter as i32).abs() as u32;
         //let hue   = RgbHue::from_degrees(map::<f32>(iter as f32, 0., max_iter as f32, 0., 359.));
-
-        //Rgb::from_color(Hsv::new(hue, 1.0, value)).into_format().into_raw()
-        /*
-            int r = (int)(9*(1-t)*t*t*t*255);
-            int g = (int)(15*(1-t)*(1-t)*t*t*255);
-            int b =  (int)(8.5*(1-t)*(1-t)*(1-t)*t*255);
-        */
         let normalized = map(iter as f32, 0., max_iter as f32, 0., 1.);
         [
             (9.*(1.-normalized)*normalized*normalized*normalized*255.) as u8,
@@ -93,20 +92,35 @@ impl Mandelbrot {
     }
 
     pub fn update(&mut self) {
-        let params = self.params;
+        if self.on_gpu && self.gpu_compute.is_some() {
+            self.compute_gpu();
+        } else {
+            let params = self.params;
 
-        self.pixels.par_iter_mut().enumerate().step_by(3).for_each(|(i, pixel)| {
-            let iter = Self::compute(&params, (i/3) as u32);
-            let color = Self::color(iter, params.max_iter);
+            self.pixels.par_iter_mut().enumerate().step_by(3).for_each(|(i, pixel)| {
+                let iter = Self::compute(&params, (i/3) as u32);
+                let color = Self::color(iter, params.max_iter);
 
-            unsafe {
-                let pixel = pixel as *mut u8;
+                unsafe {
+                    let pixel = pixel as *mut u8;
 
-                *pixel          = color[0];
-                *(pixel.add(1)) = color[1];
-                *(pixel.add(2)) = color[2];
-            }
-        });
+                    *pixel          = color[0];
+                    *(pixel.add(1)) = color[1];
+                    *(pixel.add(2)) = color[2];
+                }
+            });
+        }
+    }
+}
+
+impl Clone for Mandelbrot {
+    fn clone(&self) -> Self {
+        Self{
+            params: self.params.clone(),
+            pixels: self.pixels.clone(),
+            gpu_compute: None,
+            on_gpu: false,
+        }
     }
 }
 

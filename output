@@ -1,11 +1,1 @@
-❌ src/mandelbrot/shader.wgsl 
-ValidationErr(
-    GlobalVariable {
-        handle: [1],
-        name: "v_i",
-        error: MissingTypeFlags {
-            required: DATA | HOST_SHARED | TOP_LEVEL,
-            seen: DATA | SIZED | COPY | INTERFACE | HOST_SHARED | ARGUMENT,
-        },
-    },
-)
+✅ Success src/mandelbrot/shader.wgsl
