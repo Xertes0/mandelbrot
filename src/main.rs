@@ -6,12 +6,12 @@ extern crate image;
 mod mandelbrot;
 use mandelbrot::Mandelbrot;
 
-#[cfg(not(no_gpu))]
+#[cfg(feature = "gpu")]
 use mandelbrot::gpu::GpuCompute;
 
 use mandelbrot::compute::Compute;
 use mandelbrot::compute::ComputeCPU;
-#[cfg(not(no_gpu))]
+#[cfg(feature = "gpu")]
 use mandelbrot::compute::ComputeGPU;
 
 use sdl2::{
@@ -23,7 +23,7 @@ use sdl2::{
     keyboard::Keycode,
 };
 
-#[cfg(not(no_gpu))]
+#[cfg(feature = "gpu")]
 use std::sync::{Arc,Mutex};
 use std::path::Path;
 use std::time::{Instant,Duration};
@@ -85,7 +85,7 @@ fn main() -> Result<(), String> {
 
     let mut alia_on = true;
 
-    #[cfg(not(no_gpu))]
+    #[cfg(feature = "gpu")]
     let alia_gpu_compute: Option<Arc<Mutex<GpuCompute>>> =
         match GpuCompute::new(((WIDTH+ALIA)*(HEIGHT+ALIA)*3) as usize) {
             Some(gpu_compute) => Some(Arc::new(Mutex::new(gpu_compute))),
@@ -199,7 +199,7 @@ fn main() -> Result<(), String> {
                 let (tx,rx) = mpsc::channel();
                 alia_rx = Some(rx);
 
-                #[cfg(not(no_gpu))]
+                #[cfg(feature = "gpu")]
                 let mut compute: Box<dyn Compute+Send> =
                     if mandelbrot.on_gpu && alia_gpu_compute.is_some() {
                         let mut params = mandelbrot.params().clone();
@@ -210,11 +210,11 @@ fn main() -> Result<(), String> {
                         mandelbrot_copy.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
                         Box::new(ComputeCPU::new(mandelbrot_copy))
                     };
-                #[cfg(no_gpu)]
+                #[cfg(not(feature = "gpu"))]
                 let mut mandelbrot_copy = mandelbrot.clone();
-                #[cfg(no_gpu)]
+                #[cfg(not(feature = "gpu"))]
                 mandelbrot_copy.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
-                #[cfg(no_gpu)]
+                #[cfg(not(feature = "gpu"))]
                 let mut compute = ComputeCPU::new(mandelbrot_copy);
 
                 alia_pool.spawn(move|| {

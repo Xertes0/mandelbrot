@@ -1,10 +1,10 @@
 use super::Mandelbrot;
-#[cfg(not(no_gpu))]
+#[cfg(feature = "gpu")]
 use super::MandelbrotParameters;
-#[cfg(not(no_gpu))]
+#[cfg(feature = "gpu")]
 use super::gpu::GpuCompute;
 
-#[cfg(not(no_gpu))]
+#[cfg(feature = "gpu")]
 use std::sync::{Arc,Mutex};
 
 pub trait Compute {
@@ -30,13 +30,13 @@ impl Compute for ComputeCPU {
     }
 }
 
-#[cfg(not(no_gpu))]
+#[cfg(feature = "gpu")]
 pub struct ComputeGPU {
     params: MandelbrotParameters,
     gpu_compute: Arc<Mutex<GpuCompute>>,
 }
 
-#[cfg(not(no_gpu))]
+#[cfg(feature = "gpu")]
 impl ComputeGPU {
     pub fn new(params: MandelbrotParameters, gpu_compute: Arc<Mutex<GpuCompute>>) -> Self {
         Self{
@@ -46,7 +46,7 @@ impl ComputeGPU {
     }
 }
 
-#[cfg(not(no_gpu))]
+#[cfg(feature = "gpu")]
 impl Compute for ComputeGPU {
     fn compute(&mut self) -> Vec<u8> {
         self.gpu_compute.lock().unwrap().compute(&self.params).unwrap().iter().map(|x| *x as u8).collect::<Vec<u8>>()
