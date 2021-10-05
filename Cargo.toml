@@ -4,13 +4,17 @@ version = "0.1.0"
 edition = "2018"
 resolver = "2"
 
+[features]
+default = ["gpu"]
+gpu = ["wgpu"]
+
 [dependencies]
 sdl2     = "0.34"
 rayon    = "1.5"
 image    = "0.23"
-wgpu     = "0.10"
 bytemuck = "1.7"
 pollster = "0.2"
+wgpu     = { version = "0.10", optional = true }
 
 [profile.dev]
 # Builds with opt-level below 2 are lagging to much // Default is 0

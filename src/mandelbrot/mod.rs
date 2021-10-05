@@ -1,8 +1,8 @@
 extern crate rayon;
 
-#[cfg(not(no_gpu))]
+#[cfg(feature = "gpu")]
 pub mod gpu;
-#[cfg(not(no_gpu))]
+#[cfg(feature = "gpu")]
 use gpu::GpuCompute;
 
 pub mod compute;
@@ -18,7 +18,7 @@ pub struct MandelbrotParameters {
     height: u32,
 }
 
-#[cfg(not(no_gpu))]
+#[cfg(feature = "gpu")]
 impl MandelbrotParameters {
     pub fn set_dimensions(&mut self, width: u32, height: u32) {
         self.width  = width;
@@ -30,13 +30,15 @@ pub struct Mandelbrot {
     params: MandelbrotParameters,
     pixels: Vec::<u8>,
     pub on_gpu: bool,
-    #[cfg(not(no_gpu))]
+    #[cfg(feature = "gpu")]
     gpu_compute: Option<GpuCompute>,
 }
 
 impl Mandelbrot {
     pub fn builder(width: u32, height: u32) -> MandelbrotBuilder {
+        #[cfg(feature = "gpu")]
         let gpu_compute = GpuCompute::new((width*height*3) as usize);
+        #[cfg(feature = "gpu")]
         if gpu_compute.is_none() {
             println!("!----- GPU computing is not supported -----!");
         }
@@ -49,7 +51,7 @@ impl Mandelbrot {
                 },
                 pixels: vec![0u8;(width*height*3) as usize], // 3 colors RGB
                 on_gpu: true,
-                #[cfg(not(no_gpu))]
+                #[cfg(feature = "gpu")]
                 gpu_compute,
             }
         }
@@ -78,7 +80,7 @@ impl Mandelbrot {
     }
 
     pub fn update(&mut self) {
-        #[cfg(not(no_gpu))]
+        #[cfg(feature = "gpu")]
         if self.on_gpu && self.gpu_compute.is_some() {
             self.update_gpu();
             return;
@@ -86,7 +88,7 @@ impl Mandelbrot {
         self.update_cpu();
     }
 
-    #[cfg(not(no_gpu))]
+    #[cfg(feature = "gpu")]
     fn update_gpu(&mut self) {
         let gpu_out = self.gpu_compute.as_mut().unwrap().compute(&self.params).unwrap();
         self.pixels = gpu_out.iter().map(|x| *x as u8).collect::<Vec<u8>>();
@@ -168,7 +170,7 @@ impl Clone for Mandelbrot {
             params: self.params.clone(),
             pixels: self.pixels.clone(),
             on_gpu: false,
-            #[cfg(not(no_gpu))]
+            #[cfg(feature = "gpu")]
             gpu_compute: None,
         }
     }
