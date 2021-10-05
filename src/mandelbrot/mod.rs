@@ -167,7 +167,7 @@ impl MandelbrotBuilder {
 impl Clone for Mandelbrot {
     fn clone(&self) -> Self {
         Self{
-            params: self.params.clone(),
+            params: self.params,
             pixels: self.pixels.clone(),
             on_gpu: false,
             #[cfg(feature = "gpu")]
