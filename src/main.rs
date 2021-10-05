@@ -43,7 +43,6 @@ const SCREENSHOT_PATH: &str = "./screenshot.png";
 
 fn main() -> Result<(), String> {
     println!("Hello, world!");
-    assert!(ALIA <= 2344, "ALIA has to be <= to 2344. See comments for explanation");
     
     let sdl_context = sdl2::init()?;
     let vid_subsys = sdl_context.video()?;
@@ -193,65 +192,58 @@ fn main() -> Result<(), String> {
             should_alia = true;
             alia_rx     = None;
             alia_timer  = Instant::now();
-        } else {
-            if alia_on && !is_alia && should_alia && alia_timer.elapsed() > Duration::from_millis(500) {
-                println!("!----- Thread created -----!");
-                let (tx,rx) = mpsc::channel();
-                alia_rx = Some(rx);
+        } else if alia_on && !is_alia && should_alia && alia_timer.elapsed() > Duration::from_millis(500) {
+            println!("!----- Thread created -----!");
+            let (tx,rx) = mpsc::channel();
+            alia_rx = Some(rx);
 
-                #[cfg(feature = "gpu")]
-                let mut compute: Box<dyn Compute+Send> =
-                    if mandelbrot.on_gpu && alia_gpu_compute.is_some() {
-                        let mut params = mandelbrot.params().clone();
-                        params.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
-                        Box::new(ComputeGPU::new(params, Arc::clone(alia_gpu_compute.as_ref().unwrap())))
-                    } else {
-                        let mut mandelbrot_copy = mandelbrot.clone();
-                        mandelbrot_copy.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
-                        Box::new(ComputeCPU::new(mandelbrot_copy))
-                    };
-                #[cfg(not(feature = "gpu"))]
-                let mut mandelbrot_copy = mandelbrot.clone();
-                #[cfg(not(feature = "gpu"))]
-                mandelbrot_copy.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
-                #[cfg(not(feature = "gpu"))]
-                let mut compute = ComputeCPU::new(mandelbrot_copy);
+            #[cfg(feature = "gpu")]
+            let mut compute: Box<dyn Compute+Send> =
+                if mandelbrot.on_gpu && alia_gpu_compute.is_some() {
+                    let mut params = *mandelbrot.params();
+                    params.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
+                    Box::new(ComputeGPU::new(params, Arc::clone(alia_gpu_compute.as_ref().unwrap())))
+                } else {
+                    let mut mandelbrot_copy = mandelbrot.clone();
+                    mandelbrot_copy.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
+                    Box::new(ComputeCPU::new(mandelbrot_copy))
+                };
+            #[cfg(not(feature = "gpu"))]
+            let mut mandelbrot_copy = mandelbrot.clone();
+            #[cfg(not(feature = "gpu"))]
+            mandelbrot_copy.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
+            #[cfg(not(feature = "gpu"))]
+            let mut compute = ComputeCPU::new(mandelbrot_copy);
 
-                alia_pool.spawn(move|| {
-                    let now = Instant::now();
-                    let mut img = image::DynamicImage::new_rgb8(WIDTH+ALIA,HEIGHT+ALIA);
+            alia_pool.spawn(move|| {
+                let now = Instant::now();
+                let mut img = image::DynamicImage::new_rgb8(WIDTH+ALIA,HEIGHT+ALIA);
 
-                    let pixels = compute.compute();
-                    let mut iter = pixels.iter();
-                    for pixel in img.as_mut_rgb8().unwrap().pixels_mut() {
-                        *pixel = image::Rgb([
-                            *iter.next().unwrap(),
-                            *iter.next().unwrap(),
-                            *iter.next().unwrap()
-                        ]);
-                    }
-                    let new = img.resize(WIDTH,HEIGHT,image::imageops::FilterType::Lanczos3);
-                    //let new = new.blur(0.5);
-                    //let unsharpen = new.unsharpen(0.5, -200);
-                    tx.send(new.into_bytes()).unwrap_or(());
-                    println!("Alia elapsed: {:?}", now.elapsed());
-                });
-                should_alia = false;
-            } else {
-                if let Some(rx) = &alia_rx {
-                    match rx.try_recv() {
-                        Ok(vec) => {
-                            println!("!----- Received alia -----!");
-                            mandelbrot.set_pixels(vec);
-                            texture.update(None, mandelbrot.pixels(), (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
-                            canvas.copy(&texture, None, None).unwrap();
-                            canvas.present();
-
-                            is_alia = true;
-                        },
-                        Err(_) => {},
-                    }
+                let pixels = compute.compute();
+                let mut iter = pixels.iter();
+                for pixel in img.as_mut_rgb8().unwrap().pixels_mut() {
+                    *pixel = image::Rgb([
+                        *iter.next().unwrap(),
+                        *iter.next().unwrap(),
+                        *iter.next().unwrap()
+                    ]);
                 }
+                let new = img.resize(WIDTH,HEIGHT,image::imageops::FilterType::Lanczos3);
+                //let new = new.blur(0.5);
+                //let unsharpen = new.unsharpen(0.5, -200);
+                tx.send(new.into_bytes()).unwrap_or(());
+                println!("Alia elapsed: {:?}", now.elapsed());
+            });
+            should_alia = false;
+        } else if let Some(rx) = &alia_rx {
+            if let Ok(vec) = rx.try_recv() {
+                println!("!----- Received alia -----!");
+                mandelbrot.set_pixels(vec);
+                texture.update(None, mandelbrot.pixels(), (WIDTH*3) as usize).unwrap(); // last parm - bytes in a row
+                canvas.copy(&texture, None, None).unwrap();
+                canvas.present();
+
+                is_alia = true;
             }
         }
 
