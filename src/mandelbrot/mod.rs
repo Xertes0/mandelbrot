@@ -36,6 +36,11 @@ pub struct Mandelbrot {
 
 impl Mandelbrot {
     pub fn builder(width: u32, height: u32) -> MandelbrotBuilder {
+        let gpu_compute = GpuCompute::new((width*height*3) as usize);
+        if gpu_compute.is_none() {
+            println!("!----- GPU computing is not supported -----!");
+        }
+
         MandelbrotBuilder {
             mandelbrot: Mandelbrot {
                 params: MandelbrotParameters {
@@ -45,7 +50,7 @@ impl Mandelbrot {
                 pixels: vec![0u8;(width*height*3) as usize], // 3 colors RGB
                 on_gpu: true,
                 #[cfg(not(no_gpu))]
-                gpu_compute: GpuCompute::new((width*height*3) as usize),
+                gpu_compute,
             }
         }
     }

@@ -86,8 +86,14 @@ fn main() -> Result<(), String> {
     let mut alia_on = true;
 
     #[cfg(not(no_gpu))]
-    let alia_gpu_compute: Arc<Mutex<GpuCompute>> =
-        Arc::new(Mutex::new(GpuCompute::new(((WIDTH+ALIA)*(HEIGHT+ALIA)*3) as usize).unwrap()));
+    let alia_gpu_compute: Option<Arc<Mutex<GpuCompute>>> =
+        match GpuCompute::new(((WIDTH+ALIA)*(HEIGHT+ALIA)*3) as usize) {
+            Some(gpu_compute) => Some(Arc::new(Mutex::new(gpu_compute))),
+            None => {
+                println!("!----- GPU computing is not supported -----!");
+                None
+            },
+        };
 
     'main: loop {
         for event in event_pump.poll_iter() {
@@ -194,15 +200,16 @@ fn main() -> Result<(), String> {
                 alia_rx = Some(rx);
 
                 #[cfg(not(no_gpu))]
-                let mut compute: Box<dyn Compute+Send> = if mandelbrot.on_gpu {
-                    let mut params = mandelbrot.params().clone();
-                    params.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
-                    Box::new(ComputeGPU::new(params, Arc::clone(&alia_gpu_compute)))
-                } else {
-                    let mut mandelbrot_copy = mandelbrot.clone();
-                    mandelbrot_copy.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
-                    Box::new(ComputeCPU::new(mandelbrot_copy))
-                };
+                let mut compute: Box<dyn Compute+Send> =
+                    if mandelbrot.on_gpu && alia_gpu_compute.is_some() {
+                        let mut params = mandelbrot.params().clone();
+                        params.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
+                        Box::new(ComputeGPU::new(params, Arc::clone(alia_gpu_compute.as_ref().unwrap())))
+                    } else {
+                        let mut mandelbrot_copy = mandelbrot.clone();
+                        mandelbrot_copy.set_dimensions(WIDTH+ALIA, HEIGHT+ALIA);
+                        Box::new(ComputeCPU::new(mandelbrot_copy))
+                    };
                 #[cfg(no_gpu)]
                 let mut mandelbrot_copy = mandelbrot.clone();
                 #[cfg(no_gpu)]
