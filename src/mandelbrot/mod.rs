@@ -1,13 +1,13 @@
 extern crate rayon;
 
+use rayon::prelude::*;
+
 #[cfg(feature = "gpu")]
 pub mod gpu;
 #[cfg(feature = "gpu")]
 use gpu::GpuCompute;
 
 pub mod compute;
-
-use rayon::prelude::*;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct MandelbrotParameters {
@@ -187,26 +187,3 @@ where
 {
     (val-a_min)/(a_max-a_min) * (b_max-b_min) + b_min
 }
-
-/*
-#[cfg(test)]
-mod bench {
-    extern crate test;
-    use test::bench::Bencher;
-
-    use super::Mandelbrot;
-
-    const LEN: usize = (crate::WIDTH*crate::HEIGHT*3) as usize;
-    #[bench]
-    fn update_test(b: &mut Bencher) {
-        let mut mandelbrot = Mandelbrot::builder(crate::WIDTH, crate::HEIGHT)
-            .max_iter(100)
-            .range((-2.5,1.5))
-            .build();
-        b.iter(|| {
-            mandelbrot.update();
-            mandelbrot.pixels();
-        });
-    }
-}
-*/
