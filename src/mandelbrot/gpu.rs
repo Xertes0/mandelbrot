@@ -9,6 +9,8 @@ use super::MandelbrotParameters;
 
 use std::path::Path;
 
+const SHADER_PATH: &str = "./shaders/shader.wgsl";
+
 #[allow(dead_code)]
 #[derive(Clone, Copy, Default)]
 struct ShaderParameters{
@@ -29,16 +31,14 @@ impl ShaderParameters {
         Self {
             range_min: params.range.0 as f32,
             range_max: params.range.1 as f32,
-            pos_x:     params.pos.0 as f32,
-            pos_y:     params.pos.1 as f32,
+            pos_x:     params.pos.0   as f32,
+            pos_y:     params.pos.1   as f32,
             max_iter:  params.max_iter,
             width:     params.width,
             height:    params.height,
         }
     }
 }
-
-const SHADER_PATH: &str = "./shaders/shader.wgsl";
 
 pub struct GpuCompute {
     pixel_count_mul: usize,
@@ -66,12 +66,6 @@ impl GpuCompute {
                 },
                 None,
             )).ok()?;
-
-        let info = adapter.get_info();
-        // Example does this for some reason
-        if info.vendor == 0x10005 {
-            return None;
-        }
 
         let cs_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,

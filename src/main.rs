@@ -1,5 +1,3 @@
-//#![feature(test)]
-
 extern crate sdl2;
 extern crate image;
 
@@ -9,10 +7,7 @@ use mandelbrot::Mandelbrot;
 #[cfg(feature = "gpu")]
 use mandelbrot::gpu::GpuCompute;
 
-use mandelbrot::compute::Compute;
-use mandelbrot::compute::ComputeCPU;
-#[cfg(feature = "gpu")]
-use mandelbrot::compute::ComputeGPU;
+use mandelbrot::compute::*; // Compute, ComputeCPU, ComputeGPU
 
 use sdl2::{
     pixels::{
@@ -23,18 +18,22 @@ use sdl2::{
     keyboard::Keycode,
 };
 
+use std::{
+    path::Path,
+    time::{Instant,Duration},
+    sync::mpsc,
+    collections::HashMap,
+};
+
 #[cfg(feature = "gpu")]
 use std::sync::{Arc,Mutex};
-use std::path::Path;
-use std::time::{Instant,Duration};
-use std::sync::mpsc;
-use std::collections::HashMap;
 
-const WIDTH:  u32 = 1000; // Must be the same
-const HEIGHT: u32 = 1000; // Must be the same
+const WIDTH:  u32 = 1000;
+const HEIGHT: u32 = WIDTH; // Must be the same as WIDTH
 // Because wgsl dosen't support u8 we need to use u32 thus allocating 4 times more memory
-// And limiting the mandelbrot to 3344 by 3344
-const ALIA: u32 = 2344; // WIDTH+ALIA and HEIGHT+ALIA cannot be greater than 3344
+// Since the buffer size is limited
+// The mandelbrot's size is limited to 3344 by 3344
+const ALIA: u32 = 2344; // WIDTH+ALIA cannot be greater than 3344
 const ZOOM_FACTOR:      f64 = 0.95;
 const MOV_SPEED_FACTOR: f64 = 0.95;
 const MOVEMENT_SPEED_DEFAULT: f64 = 0.5;
@@ -42,13 +41,13 @@ const MOVEMENT_SPEED_DEFAULT: f64 = 0.5;
 const SCREENSHOT_PATH: &str = "./screenshot.png";
 
 fn main() -> Result<(), String> {
-    println!("Hello, world!");
+    println!("Mandelbrot!");
     
     let sdl_context = sdl2::init()?;
     let vid_subsys = sdl_context.video()?;
 
     let window = vid_subsys
-        .window("Mandelbrot Set", WIDTH, HEIGHT)
+        .window("Mandelbrot Explorer", WIDTH, HEIGHT)
         .position_centered()
         .opengl()
         .build()
@@ -68,21 +67,20 @@ fn main() -> Result<(), String> {
 
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator.create_texture_static(PixelFormatEnum::RGB24, WIDTH, HEIGHT).unwrap();
-    
-    let mut alia_timer = Instant::now();
 
     let mut alia_rx: Option<mpsc::Receiver<Vec<u8>>> = None;
-    let mut is_alia = false;
 
     let alia_pool = rayon::ThreadPoolBuilder::new()
         .num_threads(2)
         .build()
         .unwrap();
-    let mut should_alia = true;
 
     let mut keys_pressed = HashMap::new();
 
-    let mut alia_on = true;
+    let mut is_alia      = false;
+    let mut alia_enabled = true;
+    let mut should_alia  = true;
+    let mut alia_timer   = Instant::now();
 
     #[cfg(feature = "gpu")]
     let alia_gpu_compute: Option<Arc<Mutex<GpuCompute>>> =
@@ -102,7 +100,8 @@ fn main() -> Result<(), String> {
                     match key {
                         Some(Keycode::E) => { keys_pressed.insert(Keycode::E, false); },
                         Some(Keycode::Q) => { keys_pressed.insert(Keycode::Q, false); },
-                        Some(Keycode::W) => { keys_pressed.insert(Keycode::W, false); }, Some(Keycode::S) => { keys_pressed.insert(Keycode::S, false); },
+                        Some(Keycode::W) => { keys_pressed.insert(Keycode::W, false); },
+                        Some(Keycode::S) => { keys_pressed.insert(Keycode::S, false); },
                         Some(Keycode::A) => { keys_pressed.insert(Keycode::A, false); },
                         Some(Keycode::D) => { keys_pressed.insert(Keycode::D, false); },
                         Some(Keycode::K) => { keys_pressed.insert(Keycode::K, false); },
@@ -120,7 +119,7 @@ fn main() -> Result<(), String> {
                         Some(Keycode::D) => { keys_pressed.insert(Keycode::D, true); },
                         Some(Keycode::K) => { keys_pressed.insert(Keycode::K, true); },
                         Some(Keycode::J) => { keys_pressed.insert(Keycode::J, true); },
-                        Some(Keycode::R) => { alia_on = !alia_on; should_alia = true; },
+                        Some(Keycode::R) => { alia_enabled = !alia_enabled; should_alia = true; },
                         Some(Keycode::G) => { mandelbrot.on_gpu = !mandelbrot.on_gpu; },
                         Some(Keycode::Space) => {
                             println!("!----- Screenshot -----!");
@@ -169,7 +168,6 @@ fn main() -> Result<(), String> {
         if draw {
             println!("{:#?}",              mandelbrot.params());
             println!("Zoom/factor: {} {}", zoom, ZOOM_FACTOR);
-            println!("Next zoom:   {}"   , ZOOM_FACTOR/zoom);
             println!("Mov/factor : {} {}", mov_speed, MOV_SPEED_FACTOR);
             canvas.set_draw_color(Color::RGB(0, 0, 0));
 
@@ -192,7 +190,7 @@ fn main() -> Result<(), String> {
             should_alia = true;
             alia_rx     = None;
             alia_timer  = Instant::now();
-        } else if alia_on && !is_alia && should_alia && alia_timer.elapsed() > Duration::from_millis(500) {
+        } else if alia_enabled && !is_alia && should_alia && alia_timer.elapsed() > Duration::from_millis(500) {
             println!("!----- Thread created -----!");
             let (tx,rx) = mpsc::channel();
             alia_rx = Some(rx);
@@ -230,7 +228,6 @@ fn main() -> Result<(), String> {
                 }
                 let new = img.resize(WIDTH,HEIGHT,image::imageops::FilterType::Lanczos3);
                 //let new = new.blur(0.5);
-                //let unsharpen = new.unsharpen(0.5, -200);
                 tx.send(new.into_bytes()).unwrap_or(());
                 println!("Alia elapsed: {:?}", now.elapsed());
             });
