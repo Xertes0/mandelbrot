@@ -95,11 +95,9 @@ impl Mandelbrot {
     }
     
     fn update_cpu(&mut self) {
-        let params = self.params;
-
         self.pixels.par_iter_mut().enumerate().step_by(3).for_each(|(i, pixel)| {
-            let iter = Self::compute(&params, (i/3) as u32);
-            let color = Self::color(iter, params.max_iter);
+            let iter = Self::compute(&self.params, (i/3) as u32);
+            let color = Self::color(iter, self.params.max_iter);
 
             unsafe {
                 let pixel = pixel as *mut u8;
